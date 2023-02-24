@@ -1,0 +1,20 @@
+Requirements to run Slow program ver0.02
+
+python (version >= 3.5.2)
+numpy (vesrsion >= 1.15.4)
+yaml (version >= 3.11)
+simplekml (version >= 1.3.2)
+(gpxpy (version >= 1.3.5))
+
+(versions used in the developer's environment)
+
+
+** The Python standard libraries used in Slow program **
+sys
+os
+shutil
+
+
+** Examples to update libraries **
+python3 -m pip install --upgrade numpy
+python3 -m pip install --upgrade yaml
