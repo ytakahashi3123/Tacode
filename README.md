@@ -9,7 +9,7 @@ The planetary gravity, Coriolis, centrifugal, and aerodynamic forces act on this
 The gravity force is obtained by differentiating the gravitational potential considering J20, J22, J30, and J40.
 The aerodynamic force was given by atmospheric density, drag coefficient, characteristic (projection) area, and velocity.
 The atmospheric data is given by NRLMSISE-00 Atmosphere Model.
-The equation of motion is numerically solved using fourth-order Runge\UTF{2013}Kutta method in four stages.
+The equation of motion is numerically solved using fourth-order Runge-Kutta method in four stages.
 
 **The governing equations are the three-degree-of-freedom motion equations for a mass point in a non-inertial coordinate system**
 ```math
