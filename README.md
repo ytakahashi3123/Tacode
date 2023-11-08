@@ -11,6 +11,14 @@ The aerodynamic force was given by atmospheric density, drag coefficient, charac
 The atmospheric data is given by NRLMSISE-00 Atmosphere Model.
 The equation of motion is numerically solved using fourth-order Runge\UTF{2013}Kutta method in four stages.
 
+**The governing equations are the three-degree-of-freedom motion equations for a mass point in a non-inertial coordinate system**
+```math
+	m \frac { { \partial  }^{ 2 } {\boldsymbol x} }{ \partial { t }^{ 2 } } = 
+	{\boldsymbol F}_{\rm grav} 
+	- 2m{ \boldsymbol \omega }\times \frac { { \partial  } {\boldsymbol x} }{ \partial { t } } 
+	- m {\boldsymbol  \omega  }\times \left( { \boldsymbol \omega  }\times { \boldsymbol x } \right) 
+	+ {\boldsymbol F}_{\rm aero}
+```
 
 # How to start calculation
 
