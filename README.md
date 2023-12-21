@@ -1,5 +1,5 @@
 # Tacode
-`Tacode`: Trajectory analysis code
+Trajectory analysis code
 
 
 # Code description
@@ -26,13 +26,13 @@ The governing equations are the three-degree-of-freedom motion equations for a m
 -->
 
 $$
-\begin{aligned}
+\begin{align}
 	m \frac { { \partial  }^{ 2 } {\boldsymbol x} }{ \partial { t }^{ 2 } } = 
 	{\boldsymbol F}_{\rm grav} 
 	- 2m{ \boldsymbol \omega }\times \frac { { \partial  } {\boldsymbol x} }{ \partial { t } } 
 	- m {\boldsymbol  \omega  }\times \left( { \boldsymbol \omega  }\times { \boldsymbol x } \right) 
 	+ {\boldsymbol F}_{\rm aero} ,
-\end{aligned}
+\end{align}
 $$
 
 where, $t$ is time, ${\boldsymbol x}$ and $m$ are the position vector of the mass point and its mass, respectively, and ${\boldsymbol \omega}$ denotes the angular velocity vector.
