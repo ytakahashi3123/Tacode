@@ -15,16 +15,6 @@ The equation of motion is numerically solved using fourth-order Runge-Kutta meth
 
 The governing equations are the three-degree-of-freedom motion equations for a mass point in a non-inertial coordinate system: the Earth-Centered Earth-Fixed (ECEF) coordinate systemm, which is express by
 
-<!--
-```math
-	m \frac { { \partial  }^{ 2 } {\boldsymbol x} }{ \partial { t }^{ 2 } } = 
-	{\boldsymbol F}_{\rm grav} 
-	- 2m{ \boldsymbol \omega }\times \frac { { \partial  } {\boldsymbol x} }{ \partial { t } } 
-	- m {\boldsymbol  \omega  }\times \left( { \boldsymbol \omega  }\times { \boldsymbol x } \right) 
-	+ {\boldsymbol F}_{\rm aero}
-```
--->
-
 ```math
 	m \frac { { \partial  }^{ 2 } {\boldsymbol x} }{ \partial { t }^{ 2 } } = 
 	{\boldsymbol F}_{\rm grav} 
@@ -41,14 +31,14 @@ Here, ${\boldsymbol F}_{\rm grav}$ is the force of gravity and ${\boldsymbol F}_
 
 Because the Earth is a spheroid shape where the radii at the equator and the poles are different due to its rotation, it is convienient to describe the potential with spherical harmonics in polar coordinates [@CWagner1966], which can be represented as a summation of $J$ terms as follows:
 
-\begin{aligned}
+```math
 	U = - \frac{G M}{r} 
 	\left[ 1
 	- \left( \frac{a_{e}}{r} \right)^2 J_{20} \frac{ 3 \sin^2 \beta - 1}{2} 
 	- \left( \frac{a_{e}}{r} \right)^2 J_{22} 3 \cos^2 \beta \cos 2 \left( \alpha + \alpha_{22} \right) 
 	- \left( \frac{a_{e}}{r} \right)^3 J_{30} \frac{ 5 \sin^3 \beta - 3 \sin \beta}{2}  
 	- \left( \frac{a_{e}}{r} \right)^4 J_{40} \frac{35}{8} \left( \sin^4 \beta - 30 \sin^2 \beta + 3 \right) \right] .
-\end{aligned}
+```
 
 Here, $G$ is the universal gravitational constant, $M$ is the planetary mass, and $r$ represents the radial distance. 
 For Earth, $G=6.67408\times10^{-11}$ m$^3$/{kg$\cdot$s$^2$} and $M=5.9722\times10^{24}$ kg are given.
