@@ -104,7 +104,7 @@ python3 tacode.py
 
 ## Configuration file
 
-Trajectory simulation by `Tacode` is controled by the configuration file: ***.
+Trajectory simulation by `Tacode` is controled by the configuration file: `config.yml`.
 
 ## Requirements
 
