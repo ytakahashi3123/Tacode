@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-# Author: Y.Takahashi, Hokkaido University
-# Date: 2022/05/23
-
 import numpy as np
+import os as os
 
 # Dict key
 KEY_LENGTH   = 'characteristic_length'
@@ -35,7 +33,15 @@ def set_satellite_property(config):
 
 def read_aerodynamic_file(config):
 
-  filename_tmp = config['satellite']['directory_aerodynamic'] + '/' + config['satellite']['filename_aerodynamic']
+  script_directory = os.path.dirname(os.path.realpath(__file__))
+  if config['satellite']['directory_path_specify'] == 'auto' or config['satellite']['directory_path_specify'] == 'default':
+    directory_path = script_directory + '/../../database/aerodynamic' 
+  elif config['satellite']['directory_path_specify'] == 'manual':
+    directory_path = config['satellite']['directory_aerodynamic']
+  else :
+    directory_path = script_directory + '/../../database/aerodynamice' 
+
+  filename_tmp = directory_path + '/' + config['satellite']['filename_aerodynamic']
   print('Reading aerodynamic model...:', filename_tmp)
 
   # File open

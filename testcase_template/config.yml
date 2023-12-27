@@ -24,7 +24,8 @@ satellite:
   drag_coefficient: 1.0
 
   # Drag coefficient (aerodynamic model: fileinput)
-  directory_aerodynamic: ../database/aerodynamic
+  directory_path_specify: default # default or manual
+  directory_aerodynamic: ../../database/aerodynamic
   filename_aerodynamic: aerodynamic.txt
 
 
@@ -75,7 +76,8 @@ atmosphere:
   temperature: 300.0
 
   # Atmosphere model: file input
-  directory_atmosphere: ../database/atmosphere
+  directory_path_specify: default # default or manual
+  directory_atmosphere: ../../database/atmosphere
   filename_atmosphere: atmospheremodel.txt
 
   
@@ -152,3 +154,34 @@ post_process:
   flag_output_vtk: False
   filename_output_vtk: output.vtk
 
+
+
+# Monte-Carlo process
+montecarlo:
+  # TAcode case directory
+  work_dir: work_montecarlo
+  case_dir: case
+  
+  # Template path for Tacode work directory
+  template_path_specify: default # default or manual
+  template_path: ../testcase_template 
+
+  # Executing script
+  cmd_program: python3.9
+  cmd_log: log_tacode
+  cmd_path_specify: default # default or manual
+  cmd_path: ../../src
+  cmd_tacode: tacode.py
+  cmd_shell: ./run_tacode.sh
+  
+  # Control file
+  filename_control: config.yml
+  
+  # Result file name computed by Tacode
+  filename_trajectory: trajectory.dat
+  
+  # Result trajectory of Tacode 
+  result_dir: result_tacode
+  flag_tecplot: True
+  header_tecplot: variables=Time[day],Longitude[deg],Latitude[deg],Altitude[km],Vel_long[m/s],Vel_lat[m/s],Vel_alt[m/s],Vel_mag[m/s],Density[kg/m3],Temperature[K],Kn,Time[sec]
+  filename_tecplot: tecplot_taresult.dat

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-# Author: Y.Takahashi, Hokkaido University
-# Date: 2022/05/31
-
 import numpy as np
+import os as os
 from general.general import general
 import coordinate_system.coordinate_system as coordinate_system
 
@@ -50,6 +48,17 @@ class orbital(general):
     self.make_directory(dir_result)
 
     return
+
+
+  def get_directory_path(self, path_specify, default_path, manual_path):
+    script_directory = os.path.dirname(os.path.realpath(__file__))
+    if path_specify == 'auto' or path_specify == 'default':
+      directory_path = script_directory + default_path
+    elif path_specify == 'manual':
+      directory_path = manual_path
+    else :
+      directory_path = script_directory + default_path
+    return directory_path
 
 
   def initial_settings(self, config):

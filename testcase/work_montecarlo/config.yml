@@ -167,11 +167,11 @@ montecarlo:
   template_path: ../testcase_template 
 
   # Executing script
-  cmd_program: python3.9
-  cmd_log: log_tacode
-  cmd_path_specify: default # default or manual
-  cmd_path: ../../src
-  cmd_tacode: tacode.py
+  #cmd_program: python3.9
+  #cmd_log: log_tacode
+  #cmd_path_specify: default # default or manual
+  #cmd_path: ../../src
+  #cmd_tacode: tacode.py
   cmd_shell: ./run_tacode.sh
   
   # Control file

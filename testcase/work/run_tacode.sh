@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LD=../src/tacode.py
+LD=../../src/tacode.py
 LOG=log_tacode
 
 #$LD 2>&1 | tee $LOG

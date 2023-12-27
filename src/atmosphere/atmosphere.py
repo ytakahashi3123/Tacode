@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 
-# Author: Y.Takahashi, Hokkaido University
-# Date: 2022/05/31
-
 import numpy as np
-
+import os as os
 
 # 単位変換
 # ’read_atmosphere_file’でKey errorがあったときは下記の単位変換が正しいかチェックする
@@ -38,7 +35,15 @@ def initial_settings_atmosphere(config):
 
 def read_atmosphere_file(config):
 
-  filename_tmp = config['atmosphere']['directory_atmosphere'] + '/' + config['atmosphere']['filename_atmosphere']
+  script_directory = os.path.dirname(os.path.realpath(__file__))
+  if config['atmosphere']['directory_path_specify'] == 'auto' or config['atmosphere']['directory_path_specify'] == 'default':
+    directory_path = script_directory + '/../../database/atmosphere' 
+  elif config['atmosphere']['directory_path_specify'] == 'manual':
+    directory_path = config['atmosphere']['directory_atmosphere'] 
+  else :
+    directory_path = script_directory + '/../../database/atmosphere' 
+
+  filename_tmp = directory_path + '/' + config['atmosphere']['filename_atmosphere']
   print('Reading atmosphere model...:', filename_tmp)
 
   # File open
