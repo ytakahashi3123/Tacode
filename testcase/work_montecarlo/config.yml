@@ -166,6 +166,13 @@ montecarlo:
   template_path_specify: default # default or manual
   template_path: ../testcase_template 
 
+  # Target variables to be changed in the Monte Carlo routine
+  target_variable:
+    - 
+      - density_factor # Variable name
+      - initial_settings # Variable's root name 
+      - 0.1          # Dispersion in random
+
   # Executing script
   #cmd_program: python3.9
   #cmd_log: log_tacode

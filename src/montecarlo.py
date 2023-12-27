@@ -3,6 +3,7 @@
 import numpy as np
 import os as os
 import shutil as shutil
+import random as random
 from orbital.orbital import orbital
 
 
@@ -29,8 +30,6 @@ class montecarlo(orbital):
     super().make_directory_rm(self.work_dir)
   
     # Copy template for tacode run
-    #if ( os.path.exists(self.work_dir) ):
-    #  os.rmdir(self.work_dir)
     self.work_dir_template = self.work_dir+'/'+self.case_dir+'_template'
     shutil.copytree(self.template_path, self.work_dir_template)
 
@@ -42,8 +41,8 @@ class montecarlo(orbital):
     self.cmd_home = os.path.dirname(os.path.realpath(__file__))
 
     # Tacodeコントロールファイルにおける置換関連
-    self.txt_indentified = 'density_factor:' 
-    self.ele_indentified = 1
+    #self.txt_indentified = 'density_factor:' 
+    #self.ele_indentified = 1
 
     # Counter
     self.iter = 1
@@ -79,7 +78,7 @@ class montecarlo(orbital):
     words = lines_strip[i_line[0]+1].split()
     #for n in range(0,len(ele_indentified)):
     #  words[n] = txt_replaced[n]
-    words[self.ele_indentified] = txt_replaced
+    words[ele_indentified] = txt_replaced
     line_replaced  = ' '.join(words)
 
     # lines_newはリストになることに注意。そのため、'',joinでstr型に戻す
@@ -131,7 +130,7 @@ class montecarlo(orbital):
     return error_tmp
 
 
-  def f_tacode(self):
+  def f_tacode(self,config):
     # Tacodeのコントロールファイルを適切に修正して、tacodeを実行する。
 
     print('Iteration: ', self.iter)
@@ -145,9 +144,20 @@ class montecarlo(orbital):
     # コントロールファイルの書き換え 
     print('--Modification: control file')
     filename_ctl = self.work_dir_case+'/'+self.filename_control_tacode
-    # --Atmospheric density factor
-    txt_replaced = str(0.5)
-    self.rewrite_control(filename_ctl,self.txt_indentified,self.ele_indentified,txt_replaced)
+    var_montecarlo = config['montecarlo']['target_variable']
+    for n in range(0, len(var_montecarlo)):
+      var_name_ctl   = var_montecarlo[n][0]
+      var_root_ctl   = var_montecarlo[n][1]
+      var_dispersion = var_montecarlo[n][2]
+
+      var_default = config[var_root_ctl][var_name_ctl]
+
+      txt_indentified = var_name_ctl
+      ele_indentified = len(var_default)
+      txt_replaced    = str(var_default[0]*(1.0+(random.random()-0.50)*var_dispersion) )
+
+      print('Variable:',var_name_ctl,'in',var_root_ctl, ',Default:',var_default[0], ',With dispersion:',txt_replaced)
+      self.rewrite_control(filename_ctl, txt_indentified, ele_indentified,txt_replaced)
 
     # Tacodeの実行
     print('--Start Tacode')
@@ -176,7 +186,7 @@ def main():
   montecarlo.initial_settings(config)
 
   for n in range(0,10):
-    montecarlo.f_tacode()
+    montecarlo.f_tacode(config)
 
   return
 
