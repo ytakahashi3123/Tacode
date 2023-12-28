@@ -1,9 +1,11 @@
 #!/bin/bash
 
-LD=../../src/tacode.py
+PYTHON_RUN=python3
+TACODE_HOME=../../src
+LD=$TACODE_HOME/tacode.py
 LOG=log_tacode
 
-#$LD 2>&1 | tee $LOG
-##python3 $LD > $LOG
-#python3.9 $LD > $LOG
-python3.9 $LD 
+export OMP_NUM_THREADS=1
+
+$PYTHON_RUN $LD > $LOG
+#$PYTHON_RUN  $LD 2>&1 | tee $LOG
