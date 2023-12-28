@@ -37,11 +37,11 @@ initial_settings:
     -  51.47
     -  201.58
   velocity:
-    -  7577.57998256923
-    - -262.224438463479
-    -  3.45812245578943
+    - 7483.076374133284
+    - -261.9899619281948
+    - 3.5722286579865226
   density_factor:
-    - 1.0
+    - 0.9923966656027622
 
 
 planet:
@@ -170,10 +170,6 @@ montecarlo:
   target_variable:
     - 
       - density_factor # Variable name
-      - initial_settings # Variable's root name 
-      - 0.1          # Dispersion in random
-    - 
-      - velocity # Variable name
       - initial_settings # Variable's root name 
       - 0.1          # Dispersion in random
 

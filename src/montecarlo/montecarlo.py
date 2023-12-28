@@ -24,7 +24,7 @@ class montecarlo(orbital):
     path_specify = config['montecarlo']['template_path_specify']
     default_path = '/../../testcase_template' 
     manual_path  = config['montecarlo']['template_path']
-    self.template_path = orbital.get_directory_path(path_specify, default_path, manual_path)
+    self.template_path = self.get_directory_path(path_specify, default_path, manual_path)
 
     # Make directory
     super().make_directory_rm(self.work_dir)
@@ -38,20 +38,16 @@ class montecarlo(orbital):
 
     self.cmd_tacode = config['montecarlo']['cmd_shell']
     self.root_dir   = os.getcwd()
-    self.cmd_home = os.path.dirname(os.path.realpath(__file__))
-
-    # Tacodeコントロールファイルにおける置換関連
-    #self.txt_indentified = 'density_factor:' 
-    #self.ele_indentified = 1
+    self.cmd_home = os.path.dirname(os.path.realpath(__file__)) + '/..'
 
     # Counter
     self.iter = 1
 
     # Result file
-    self.result_dir       = config['montecarlo']['result_dir']
-    self.flag_tecplot     = config['montecarlo']['flag_tecplot']
-    self.header_tecplot   = config['montecarlo']['header_tecplot']
-    self.filename_tecplot = config['montecarlo']['filename_tecplot']
+    #self.result_dir       = config['montecarlo']['result_dir']
+    #self.flag_tecplot     = config['montecarlo']['flag_tecplot']
+    #self.header_tecplot   = config['montecarlo']['header_tecplot']
+    #self.filename_tecplot = config['montecarlo']['filename_tecplot']
 
     # Make directory
     #super().make_directory(self.result_dir)
@@ -62,32 +58,37 @@ class montecarlo(orbital):
   def rewrite_control(self,filename,txt_indentified,ele_indentified,txt_replaced):
     # 
     # txt_indentifiedの文字列を含む行を抽出し、その(ele_indentified)列目要素を置換する。
+    # 何度もファイル開閉をするのは問題かもしれない
 
-    # Reading control file
-    with open(filename) as f:
-      lines = f.readlines()
+    for m in range(0,ele_indentified):
+      # Reading control file
+      with open(filename) as f:
+        lines = f.readlines()
 
-    # リストとして取得 
-    lines_strip = [line.strip() for line in lines]
+      # リストとして取得 
+      lines_strip = [line.strip() for line in lines]
 
-    # 置換する行を特定する
-    # i_line    = [i for i, line in enumerate(lines_strip) if txt_indentified in line]
-    line_both        = [(i, line) for i, line in enumerate(lines_strip) if txt_indentified in line]
-    i_line, str_line = list(zip(*line_both))
-    # 抽出した行をスペース・タブで分割する。そのele_indentified列目を置換し、line_replacedというstr型に戻す。
-    words = lines_strip[i_line[0]+1].split()
-    #for n in range(0,len(ele_indentified)):
-    #  words[n] = txt_replaced[n]
-    words[ele_indentified] = txt_replaced
-    line_replaced  = ' '.join(words)
+      # 置換する行を特定する
+      # i_line    = [i for i, line in enumerate(lines_strip) if txt_indentified in line]
+      line_both        = [(i, line) for i, line in enumerate(lines_strip) if txt_indentified in line]
+      i_line, str_line = list(zip(*line_both))
 
-    # lines_newはリストになることに注意。そのため、'',joinでstr型に戻す
-    lines_new     = [item.replace( lines_strip[i_line[0]+1], line_replaced ) for item in lines]
-    str_lines_new = ''.join(lines_new)
+      # 抽出した行をスペース・タブで分割する。そのele_indentified列目を置換し、line_replacedというstr型に戻す。
+      words = lines_strip[i_line[0]+m+1].split()
+      # Replace (words[0]に該当する'-'は置換しない、その次のwords[1]を置換する)
+      words[1] = txt_replaced[m]
+      # インデントを考慮して新しい行を構築
+      line_replaced  = ' '.join(words)
 
-    # Update the file
-    with open(filename, mode="w") as f:
-      f.write(str_lines_new)
+      # 行を置換
+      # lines_newはリストになることに注意。そのため、'',joinでstr型に戻す
+      lines_updated = [item.replace( lines_strip[i_line[0]+m+1], line_replaced ) for item in lines]
+
+      str_lines_new = ''.join(lines_updated)
+
+      # Update the file
+      with open(filename, mode="w") as f:
+        f.write(str_lines_new)
     
     return
 
@@ -154,10 +155,12 @@ class montecarlo(orbital):
 
       txt_indentified = var_name_ctl
       ele_indentified = len(var_default)
-      txt_replaced    = str(var_default[0]*(1.0+(random.random()-0.50)*var_dispersion) )
+      txt_replaced = []
+      for m in range(0,ele_indentified):
+        txt_replaced.append( str(var_default[m]*(1.0+(random.random()-0.50)*var_dispersion) ) )
 
-      print('Variable:',var_name_ctl,'in',var_root_ctl, ',Default:',var_default[0], ',With dispersion:',txt_replaced)
-      self.rewrite_control(filename_ctl, txt_indentified, ele_indentified,txt_replaced)
+      print('Variable:',var_name_ctl,'in',var_root_ctl, ',Default:',var_default, ',With dispersion:',txt_replaced)
+      self.rewrite_control(filename_ctl, txt_indentified, ele_indentified, txt_replaced)
 
     # Tacodeの実行
     print('--Start Tacode')
@@ -165,43 +168,11 @@ class montecarlo(orbital):
     print('--End Tacode')
 
     # Trajectoryファイルの読み込みと誤差評価
-    print('--Evaluating error between Tacode and GPR results')
-   # error = self.evaluate_error()
-    print('--Done, Error between Tacode and GPR: ')
+    #print('--Postprocess based on results')
+    #error = self.evaluate_error()
+    #print('--Done, Postprocess based on results')
 
-    # カウンタの更新
+    # Update counter
     self.iter += 1
 
     return #error
-
-
-def main():
-
-  # 設定ファイルの読み込み
-  file_control_default = orbital.file_control_default
-  arg                  = orbital.argument(file_control_default)
-  file_control         = arg.file
-  config               = orbital.read_config_yaml(file_control)
-
-  montecarlo.initial_settings(config)
-
-  for n in range(0,10):
-    montecarlo.f_tacode(config)
-
-  return
-
-
-if __name__ == '__main__':
-
-  print('Initializing Tacode-MonteCarlo')
-
-  # Call classes
-  orbital = orbital()
-  montecarlo = montecarlo()
-
-  # Main
-  main()
-
-  print('Finalizing Tacode-MonteCarlo')
-
-  exit()

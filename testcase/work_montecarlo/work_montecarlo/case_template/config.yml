@@ -172,10 +172,6 @@ montecarlo:
       - density_factor # Variable name
       - initial_settings # Variable's root name 
       - 0.1          # Dispersion in random
-    - 
-      - velocity # Variable name
-      - initial_settings # Variable's root name 
-      - 0.1          # Dispersion in random
 
   # Executing script
   #cmd_program: python3.9
