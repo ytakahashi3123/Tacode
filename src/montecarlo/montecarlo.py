@@ -43,6 +43,8 @@ class montecarlo(orbital):
     # Counter
     self.iter = 1
 
+    self.process_list = []
+
     # Result file
     #self.result_dir       = config['montecarlo']['result_dir']
     #self.flag_tecplot     = config['montecarlo']['flag_tecplot']
@@ -93,31 +95,35 @@ class montecarlo(orbital):
     return
 
 
-  def run_tacode(self):
+  def run_tacode(self,config):
     import subprocess
     # Tacodeの実行
+
+    num_iteration = config['montecarlo']['number_iteration']
+    maximum_number_execution = config['montecarlo']['maximum_number_execution']
     
     # 計算ディレクトリに移動、実行、元ディレクトリに戻る
     os.chdir( self.work_dir_case )
     #subprocess.call('pwd')
 
     # Get relative path
-    current_path=os.getcwd()
+    current_path  = os.getcwd()
     relative_path = os.path.relpath(self.cmd_home, current_path)
     
     # Run Tacode
-    try:
-      subprocess.run([self.cmd_tacode, relative_path], check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as e:
-      print(f"Error occurred. Error code: {e.returncode}")
-      print("Error output:", e.stdout)
+    process = subprocess.Popen([self.cmd_tacode, relative_path])
+    self.process_list.append(process)
+    if self.iter%maximum_number_execution == 0 or self.iter == num_iteration:
+      for subprocess in self.process_list:
+        subprocess.wait()
+      self.process_list = []
 
     os.chdir( self.root_dir )
 
     return
 
 
-  def evaluate_error(self):
+  def postprocess(self):
 
     # Trajectoryデータの読み込み
     filename_tmp = self.work_dir_case+'/'+self.filename_trajectory_tacode
@@ -164,7 +170,7 @@ class montecarlo(orbital):
 
     # Tacodeの実行
     print('--Start Tacode')
-    self.run_tacode()
+    self.run_tacode(config)
     print('--End Tacode')
 
     # Trajectoryファイルの読み込みと誤差評価
@@ -176,3 +182,11 @@ class montecarlo(orbital):
     self.iter += 1
 
     return #error
+  
+
+  def montecarlo_routine(self,config):
+
+    for n in range(0,config['montecarlo']['number_iteration']):
+      self.f_tacode(config)
+
+    return

@@ -18,8 +18,8 @@ def main():
   # Initial setting
   montecarlo.initial_settings(config)
 
-  for n in range(0,10):
-    montecarlo.f_tacode(config)
+  # Monte-Carlo simulation
+  montecarlo.montecarlo_routine(config)
 
   return
 

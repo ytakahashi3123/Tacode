@@ -172,17 +172,12 @@ montecarlo:
       - density_factor # Variable name
       - initial_settings # Variable's root name 
       - 0.1          # Dispersion in random
-    - 
-      - velocity # Variable name
-      - initial_settings # Variable's root name 
-      - 0.1          # Dispersion in random
+#    - 
+#      - velocity # Variable name
+#      - initial_settings # Variable's root name 
+#      - 0.1          # Dispersion in random
 
   # Executing script
-  #cmd_program: python3.9
-  #cmd_log: log_tacode
-  #cmd_path_specify: default # default or manual
-  #cmd_path: ../../src
-  #cmd_tacode: tacode.py
   cmd_shell: ./run_tacode.sh
   
   # Control file
@@ -190,9 +185,16 @@ montecarlo:
   
   # Result file name computed by Tacode
   filename_trajectory: trajectory.dat
+
+  # Number of iteraction in Monte-Carlo routine
+  number_iteration: 16
   
+  # Maximum number of execution in parallel
+  maximum_number_execution: 8
+
   # Result trajectory of Tacode 
   result_dir: result_tacode
   flag_tecplot: True
   header_tecplot: variables=Time[day],Longitude[deg],Latitude[deg],Altitude[km],Vel_long[m/s],Vel_lat[m/s],Vel_alt[m/s],Vel_mag[m/s],Density[kg/m3],Temperature[K],Kn,Time[sec]
   filename_tecplot: tecplot_taresult.dat
+
