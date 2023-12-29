@@ -41,7 +41,7 @@ Because the Earth is a spheroid shape where the radii at the equator and the pol
 ```
 
 Here, $G$ is the universal gravitational constant, $M$ is the planetary mass, and $r$ represents the radial distance. 
-For Earth, $`G=6.67408\times10^{-11}`$ m$^3$/{kg$`\cdot`$s$`^2`$} and $M=5.9722\times10^{24}$ kg are given.
+For Earth, $`G=6.67408\times10^{-11}`$ m$^3$/{kg$`\cdot`$s$^2$} and $M=5.9722\times10^{24}$ kg are given.
 In addition, $a_e$ represents the planet's equatorial radius, while $J_{20}$, $J_{22}$, $J_{30}$, $J_{40}$, and $\alpha_{22}$ are the dynamic form factors associated with the planet's shape given by the reference [@liu2019guidance]. 
 By taking partial derivatives of this potential with respect to each coordinate components, the gravity in the polar coordinate system, denoted as $`\boldsymbol{F}_{grav}^{'}=(F_{g_r}^{'}, F_{g_{\alpha}}^{'}, F_{g_{\beta}}^{'})`$, are expressed as follows.
 
@@ -102,7 +102,7 @@ In addition, the gravity forces are calculated through the use of Polar coordina
 python3 tacode.py
 ```
 
-Tutorial case: `testcase/work'
+Tutorial case: `testcase/work`
 
 
 ## Monte-Carlo simulation
@@ -111,7 +111,7 @@ Tutorial case: `testcase/work'
 python3 tacode-montecarlo.py
 ```
 
-Tutorial case: `testcase/work_montecarlo'
+Tutorial case: `testcase/work_montecarlo`
 
 
 ## Configuration file
