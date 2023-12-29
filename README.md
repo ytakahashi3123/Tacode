@@ -25,7 +25,7 @@ The governing equations are the three-degree-of-freedom motion equations for a m
 
 where, $t$ is time, ${\boldsymbol x}$ and $m$ are the position vector of the mass point and its mass, respectively, and ${\boldsymbol \omega}$ denotes the angular velocity vector.
 For the Earth where the coordinate system rotates around the $z$-axis, ${\boldsymbol \omega}=(0, 0, 7.292115\times10^{-5})$ rad/s.
-Here, ${\boldsymbol F}_{\rm grav}$ is the force of gravity and ${\boldsymbol F}_{\rm aero}$ is the aerodynamic force.
+Here, $`{\boldsymbol F}_{\rm grav}`$ is the force of gravity and $`{\boldsymbol F}_{\rm aero}`$ is the aerodynamic force.
 
 ### Gravity Force
 
@@ -101,6 +101,18 @@ In addition, the gravity forces are calculated through the use of Polar coordina
 ```console
 python3 tacode.py
 ```
+
+Tutorial case: `testcase/work'
+
+
+## Monte-Carlo simulation
+
+```console
+python3 tacode-montecarlo.py
+```
+
+Tutorial case: `testcase/work_montecarlo'
+
 
 ## Configuration file
 
