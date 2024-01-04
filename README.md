@@ -98,6 +98,8 @@ In addition, the gravity forces are calculated through the use of Polar coordina
 
 # How to start calculation
 
+## Trajectory simulation
+
 ```console
 python3 src/tacode.py
 ```
@@ -125,6 +127,7 @@ Trajectory simulation by `Tacode` is controled by the configuration file: `confi
 - yaml (>= 3.11)
 - simplekml (>= 1.3.2)
 - gpxpy (>= 1.3.5)
+
 
 # Contact:
 
