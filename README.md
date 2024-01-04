@@ -99,7 +99,7 @@ In addition, the gravity forces are calculated through the use of Polar coordina
 # How to start calculation
 
 ```console
-python3 tacode.py
+python3 src/tacode.py
 ```
 
 Tutorial case: `testcase/work`
@@ -108,7 +108,7 @@ Tutorial case: `testcase/work`
 ## Monte-Carlo simulation
 
 ```console
-python3 tacode-montecarlo.py
+python3 src/tacode-montecarlo.py
 ```
 
 Tutorial case: `testcase/work_montecarlo`
@@ -133,6 +133,10 @@ Yusuke Takahashi, Hokkaido University
 ytakahashi@eng.hokudai.ac.jp
 
 
-# Date:
+# References
 
-2023/12/31
+- Yusuke Takahashi, Masahiro Saito, Nobuyuki Oshima, and Kazuhiko Yamada, “Trajectory Reconstruction for Nanosatellite in Very Low Earth Orbit Using Machine Learning.” Acta Astronautica 194: 301–8. 2022. https://doi.org/https://doi.org/10.1016/j.actaastro.2022.02.010.
+- Wagner, Carl. A. 1971. “The Gravity Potential And Force Field of the Earth Through Fourth Order.” NASA TN D-3317, 1–60.
+- Fucheng Liu, Shan Lu, and Yue Sun, Guidance and Control Technology of Spacecraft on Elliptical Orbit. Springer, 2019.
+- NRLMSISE-00 Atmosphere Model
+- Defense Mapping Agency, “Department of Defense World Geodetic System 1984: its definition and relationships with local geodetic system“, 8350, 1987
