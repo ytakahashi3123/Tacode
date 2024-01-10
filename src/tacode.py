@@ -2,10 +2,10 @@
 #!/usr/bin/env python3
 
 # Tacode: Trajectory analysis code
-# Version 2.00
+# Version 2.10
 
 # Author: Yusuke Takahashi, Hokkaido University
-# Date: 2022/06/01
+# Date: 2024/01/10
 
 
 import numpy as np
