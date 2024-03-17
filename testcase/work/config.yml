@@ -151,4 +151,3 @@ post_process:
   # Output (VTK)  
   flag_output_vtk: False
   filename_output_vtk: output.vtk
-

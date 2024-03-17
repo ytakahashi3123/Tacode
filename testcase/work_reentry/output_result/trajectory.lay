@@ -1,0 +1,591 @@
+#!MC 1410
+$!VarSet |LFDSFN1| = '"tecplot.dat"'
+$!VarSet |LFDSVL1| = '"Time[s]" "X[km]" "Y[km]" "Z[km]" "Long[deg.]" "Lati[deg.]" "Alti[km]" "Upl[m/s]" "Vpl[m/s]" "Wpl[m/s]" "VelplAbs[m/s]" "Dens[kg/m3]" "Temp[K]" "Kn"'
+$!SetStyleBase Factory
+$!GlobalPaper 
+  PaperSizeInfo
+    {
+    Letter
+      {
+      Width = 8.5
+      Height = 11
+      LeftHardClipOffset = 0.125
+      RightHardClipOffset = 0.125
+      TopHardClipOffset = 0.125
+      BottomHardClipOffset = 0.125
+      }
+    }
+$!Page 
+  Name = 'Untitled'
+  PaperAttributes
+    {
+    BackgroundColor = White
+    IsTransparent = Yes
+    OrientPortrait = No
+    ShowGrid = Yes
+    ShowRuler = No
+    ShowPaper = No
+    PaperSize = Letter
+    RulerSpacing = OneInch
+    PaperGridSpacing = HalfInch
+    RegionInWorkArea
+      {
+      X1 = 1
+      Y1 = 0.25
+      X2 = 10
+      Y2 = 8.25
+      }
+    }
+### Frame Number 1 ###
+$!ReadDataSet  '|LFDSFN1|'
+  InitialPlotType = XYLine
+  IncludeText = No
+  IncludeGeom = No
+  AssignStrandIDs = Yes
+  VarLoadMode = ByName
+  VarNameList = '|LFDSVL1|'
+$!RemoveVar |LFDSVL1|
+$!RemoveVar |LFDSFN1|
+$!FrameLayout 
+  ShowBorder = No
+  ShowHeader = No
+  HeaderColor = Red
+  XYPos
+    {
+    X = 1
+    Y = 0.25
+    }
+  Width = 9
+  Height = 8
+$!ThreeDAxis 
+  AspectRatioLimit = 25
+  BoxAspectRatioLimit = 25
+$!PlotType  = XYLine
+$!FrameName  = 'Frame 001'
+$!GlobalTime 
+  SolutionTime = 0
+$!DeleteLineMaps 
+$!ActiveLineMaps  =  [6,10]
+$!GlobalLinePlot 
+  DataLabels
+    {
+    DistanceSkip = 5
+    }
+  Legend
+    {
+    Show = Yes
+    TextShape
+      {
+      FontFamily = 'Calibri'
+      }
+    Box
+      {
+      BoxType = Filled
+      Margin = 2.5
+      }
+    XYPos
+      {
+      X = 82.302
+      Y = 85.193
+      }
+    }
+$!LineMap  [1]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 2
+    }
+  Lines
+    {
+    Color = Red
+    }
+  Symbols
+    {
+    Color = Red
+    FillColor = Red
+    }
+  BarCharts
+    {
+    Color = Red
+    FillColor = Red
+    }
+  ErrorBars
+    {
+    Color = Red
+    }
+$!LineMap  [2]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 3
+    }
+  Lines
+    {
+    Color = Green
+    }
+  Symbols
+    {
+    Color = Green
+    FillColor = Green
+    }
+  BarCharts
+    {
+    Color = Green
+    FillColor = Green
+    }
+  ErrorBars
+    {
+    Color = Green
+    }
+$!LineMap  [3]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 4
+    }
+  Lines
+    {
+    Color = Blue
+    }
+  Symbols
+    {
+    Color = Blue
+    FillColor = Blue
+    }
+  BarCharts
+    {
+    Color = Blue
+    FillColor = Blue
+    }
+  ErrorBars
+    {
+    Color = Blue
+    }
+$!LineMap  [4]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 5
+    }
+  Lines
+    {
+    Color = Custom1
+    }
+  Symbols
+    {
+    Color = Custom1
+    FillColor = Custom1
+    }
+  BarCharts
+    {
+    Color = Custom1
+    FillColor = Custom1
+    }
+  ErrorBars
+    {
+    Color = Custom1
+    }
+$!LineMap  [5]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 6
+    }
+  Lines
+    {
+    Color = Custom3
+    }
+  Symbols
+    {
+    Color = Custom3
+    FillColor = Custom3
+    }
+  BarCharts
+    {
+    Color = Custom3
+    FillColor = Custom3
+    }
+  ErrorBars
+    {
+    Color = Custom3
+    }
+$!LineMap  [6]
+  Name = 'Altitude'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 7
+    YAxis = 2
+    }
+  Lines
+    {
+    Color = Green
+    LineThickness = 0.4
+    }
+  Symbols
+    {
+    Color = Purple
+    FillColor = Purple
+    }
+  BarCharts
+    {
+    Color = Purple
+    FillColor = Purple
+    }
+  ErrorBars
+    {
+    Color = Purple
+    }
+$!LineMap  [7]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 8
+    }
+  Lines
+    {
+    Color = Red
+    }
+  Symbols
+    {
+    Color = Red
+    FillColor = Red
+    }
+  BarCharts
+    {
+    Color = Red
+    FillColor = Red
+    }
+  ErrorBars
+    {
+    Color = Red
+    }
+$!LineMap  [8]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 9
+    }
+  Lines
+    {
+    Color = Green
+    }
+  Symbols
+    {
+    Color = Green
+    FillColor = Green
+    }
+  BarCharts
+    {
+    Color = Green
+    FillColor = Green
+    }
+  ErrorBars
+    {
+    Color = Green
+    }
+$!LineMap  [9]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 10
+    }
+  Lines
+    {
+    Color = Blue
+    }
+  Symbols
+    {
+    Color = Blue
+    FillColor = Blue
+    }
+  BarCharts
+    {
+    Color = Blue
+    FillColor = Blue
+    }
+  ErrorBars
+    {
+    Color = Blue
+    }
+$!LineMap  [10]
+  Name = 'Velocity'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 11
+    }
+  Lines
+    {
+    Color = Blue
+    LineThickness = 0.4
+    }
+  Symbols
+    {
+    Color = Custom1
+    FillColor = Custom1
+    }
+  BarCharts
+    {
+    Color = Custom1
+    FillColor = Custom1
+    }
+  ErrorBars
+    {
+    Color = Custom1
+    }
+$!LineMap  [11]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 12
+    YAxis = 2
+    }
+  Lines
+    {
+    Color = Green
+    LineThickness = 0.4
+    }
+  Symbols
+    {
+    Color = Custom3
+    FillColor = Custom3
+    }
+  BarCharts
+    {
+    Color = Custom3
+    FillColor = Custom3
+    }
+  ErrorBars
+    {
+    Color = Custom3
+    }
+$!LineMap  [12]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 13
+    YAxis = 3
+    }
+  Lines
+    {
+    Color = Purple
+    LineThickness = 0.4
+    }
+  Symbols
+    {
+    Color = Purple
+    FillColor = Purple
+    }
+  BarCharts
+    {
+    Color = Purple
+    FillColor = Purple
+    }
+  ErrorBars
+    {
+    Color = Purple
+    }
+$!LineMap  [13]
+  Name = '&DV&'
+  Assign
+    {
+    Zone = 1
+    XAxisVar = 1
+    YAxisVar = 14
+    }
+  Lines
+    {
+    Color = Red
+    }
+  Symbols
+    {
+    Color = Red
+    FillColor = Red
+    }
+  BarCharts
+    {
+    Color = Red
+    FillColor = Red
+    }
+  ErrorBars
+    {
+    Color = Red
+    }
+$!XYLineAxis 
+  DepXToYRatio = 1
+  GridArea
+    {
+    DrawBorder = Yes
+    }
+  ViewportPosition
+    {
+    X2 = 85
+    }
+$!XYLineAxis 
+  XDetail 1
+    {
+    RangeMin = 0
+    RangeMax = 2800
+    GRSpacing = 500
+    TickLabel
+      {
+      TextShape
+        {
+        FontFamily = 'Calibri'
+        }
+      }
+    Gridlines
+      {
+      Show = Yes
+      }
+    Title
+      {
+      TitleMode = UseText
+      Text = 'Elapsed time, s'
+      TextShape
+        {
+        FontFamily = 'Calibri'
+        }
+      Offset = 5
+      }
+    }
+$!XYLineAxis 
+  YDetail 1
+    {
+    RangeMin = 0
+    RangeMax = 8000
+    GRSpacing = 2000
+    TickLabel
+      {
+      TextShape
+        {
+        FontFamily = 'Calibri'
+        }
+      }
+    Gridlines
+      {
+      Show = Yes
+      }
+    Title
+      {
+      TitleMode = UseText
+      Text = 'Velocity, m/s'
+      TextShape
+        {
+        FontFamily = 'Calibri'
+        }
+      Offset = 9
+      }
+    }
+$!XYLineAxis 
+  YDetail 2
+    {
+    RangeMin = 0
+    RangeMax = 200
+    GRSpacing = 50
+    TickLabel
+      {
+      TextShape
+        {
+        FontFamily = 'Calibri'
+        }
+      }
+    Title
+      {
+      TitleMode = UseText
+      Text = 'Altitude,  km'
+      TextShape
+        {
+        FontFamily = 'Calibri'
+        }
+      }
+    AxisLine
+      {
+      AxisAlignment = WithGridMax
+      }
+    }
+$!XYLineAxis 
+  YDetail 3
+    {
+    RangeMin = 657.9776611328125
+    RangeMax = 823.32726328735350307
+    GRSpacing = 50
+    TickLabel
+      {
+      TextShape
+        {
+        FontFamily = 'Calibri'
+        }
+      }
+    Title
+      {
+      ShowOnAxisLine = No
+      TextShape
+        {
+        FontFamily = 'Calibri'
+        }
+      }
+    AxisLine
+      {
+      AxisAlignment = WithGridMax
+      Offset = 8
+      }
+    }
+$!AttachGeom 
+  AnchorPos
+    {
+    X = 728.6910404995728
+    Y = 5327.586069778354
+    }
+  LineThickness = 0.2
+  ArrowheadStyle = Filled
+  ArrowheadAttachment = AtEnd
+  ArrowheadSize = 2.5
+  RawData
+1
+3
+0 0 
+0 -1094.31286621 
+359.861785889 -1094.31286621 
+$!AttachGeom 
+  AnchorPos
+    {
+    X = 1173.226206406447
+    Y = 7465.313620855567
+    }
+  LineThickness = 0.2
+  ArrowheadStyle = Filled
+  ArrowheadAttachment = AtEnd
+  ArrowheadSize = 2.5
+  RawData
+1
+3
+0 0 
+0 -852.546081543 
+-414.899475098 -852.546081543 
+$!FrameControl ActivateByNumber
+  Frame = 1
+$!SetStyleBase Config
