@@ -10,8 +10,8 @@ The gravity force is obtained by differentiating the gravitational potential con
 The aerodynamic force is given by atmospheric density, drag coefficient, characteristic (projection) area, and velocity.
 The atmospheric data is given by NRLMSISE-00 Atmosphere Model.
 The equation of motion is numerically solved using fourth-order Runge-Kutta method in four stages.
-\autoref{fig:trajectory} shows a comparison of computed trajectories for cases of the initial velocity of 7250, 7450, and 7650 m/s, which is calculated by `Tacode`.
-![Atmospheric-entry trajectories.\label{fig:trajectory}](figure/trajectory.jpg){ width=75% }
+Figure 1 shows a comparison of computed trajectories for cases of the initial velocity of 7250, 7450, and 7650 m/s, which is calculated by `Tacode`.
+![Atmospheric-entry trajectories.\label{fig:trajectory}](figure/trajectory.jpg)
 
 ## Governing equation
 
