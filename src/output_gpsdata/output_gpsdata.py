@@ -40,8 +40,8 @@ rad2deg = 180.0/np.pi
 
 def output_routine(config, iteration, coordinate_dict, velocity_dict):
 
-  #if config['post_process']['flag_output_gpx'] :
-  #  output_gpx(config, iteration, coordinate_dict, velocity_dict)
+  if config['post_process']['flag_output_gpx'] :
+    output_gpx(config, iteration, coordinate_dict, velocity_dict)
 
   if config['post_process']['kml']['flag_output'] :
     output_kml(config, iteration, coordinate_dict, velocity_dict)
