@@ -1,0 +1,113 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同じブランチで新しい push があったら古い実行は止める
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Show the versions actually installed
+        run: python -c "import numpy, scipy, yaml, simplekml; print('numpy', numpy.__version__); print('scipy', scipy.__version__); print('PyYAML', yaml.__version__); print('simplekml', simplekml.__version__)"
+
+      - name: Run the test suite
+        env:
+          TACODE_PYTHON: python
+        run: ./run_tests.sh -v
+
+  tutorial:
+    name: tutorial case (end to end)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run the tutorial case and inspect its output
+        run: python test/smoke_tutorial.py
+
+      - name: Run the tutorial through run_tacode.sh
+        env:
+          TACODE_PYTHON: python
+        run: |
+          cd tutorial/work
+          ./run_tacode.sh
+          tail -5 log_tacode
+
+      - name: A bad configuration must fail with a non-zero exit code
+        env:
+          TACODE_PYTHON: python
+        run: |
+          # 設定ミスを検知できること（かつてエラー時も 0 を返していた）
+          mkdir -p "$RUNNER_TEMP/badconfig"
+          sed 's/^  kind_atmosphere_model: .*/  kind_atmosphere_model: bogus/' \
+            tutorial/work/config.yml > "$RUNNER_TEMP/badconfig/config.yml"
+          cd "$RUNNER_TEMP/badconfig"
+          if python "$GITHUB_WORKSPACE/src/tacode.py"; then
+            echo "設定が不正なのに終了コード 0 で成功扱いになった"
+            exit 1
+          fi
+          echo "不正な設定で正しく失敗した"
+
+  setup-script:
+    name: setup_env.sh on a clean machine
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Report what is missing before setup
+        run: ./setup_env.sh --check || true
+
+      - name: Build the virtual environment
+        run: ./setup_env.sh
+
+      - name: Verify it satisfies the requirements
+        run: ./setup_env.sh --check
+
+      - name: The test suite must pick up .venv without any environment variable
+        run: ./run_tests.sh
