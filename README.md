@@ -1,7 +1,7 @@
 # Tacode
 Trajectory analysis code
 
-[![tests](https://github.com/ytakahashi3123/tacode/actions/workflows/tests.yml/badge.svg)](https://github.com/ytakahashi3123/tacode/actions/workflows/tests.yml)
+[![tests](https://github.com/ytakahashi3123/Tacode/actions/workflows/tests.yml/badge.svg)](https://github.com/ytakahashi3123/Tacode/actions/workflows/tests.yml)
 
 
 # Code description
