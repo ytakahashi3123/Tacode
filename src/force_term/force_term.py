@@ -31,7 +31,8 @@ def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, 
   sin_beta = coordinate[2]/radius_pmass
   cos_beta = np.sqrt( coordinate[0]**2 + coordinate[1]**2 )/radius_pmass
 
-  angle_long = np.arccos( coordinate[0]/np.sqrt( coordinate[0]**2 + coordinate[1]**2 ) ) * np.sign( coordinate[1] )
+  # arctan2 を使う（経度 180 度での誤算出を避ける）
+  angle_long = np.arctan2( coordinate[1], coordinate[0] )
   sin_labd   = np.sin( angle_long )
   cos_labd   = np.cos( angle_long )
 

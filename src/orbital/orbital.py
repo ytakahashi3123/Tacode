@@ -2,6 +2,7 @@
 
 import numpy as np
 import os as os
+import sys as sys
 from general.general import general
 import coordinate_system.coordinate_system as coordinate_system
 
@@ -94,7 +95,7 @@ class orbital(general):
       print('Restart routine is Not implemented in this version.')
       print('Please check: flag_initial.')
       print('Program stopped')
-      exit()
+      sys.exit(1)
 
       coordinate_geodetic = []
       velocity_polar      = []
@@ -164,7 +165,7 @@ class orbital(general):
     file.write('# Restart data (ECEF, cartesian system)' + self.newline_code)
     file.write('# Iteration, Elapsed time' + self.newline_code)
     file.write('# '+ str(iteration) + self.blank_code + str(time_elapsed) + self.newline_code)
-    for n in range(0,iteration):
+    for n in range(0,iteration+1):
       str_coord = str(coordinate[n][0])+ self.blank_code +str(coordinate[n][1]) + self.blank_code + str(coordinate[n][2]) 
       vel_coord = str(velocity[n][0])  + self.blank_code +str(velocity[n][1])   + self.blank_code + str(velocity[n][2]) 
       file.write( str_coord + self.blank_code + vel_coord + self.newline_code)
@@ -233,11 +234,12 @@ class orbital(general):
       file = open(filename_tmp, "w")
       file.write('# Tecplot data: Tacode' + self.newline_code)
       file.write('Variables = Time[s],X[km],Y[km],Z[km],Long[deg.],Lati[deg.],Alti[km],Upl[m/s],Vpl[m/s],Wpl[m/s],VelplAbs[m/s],Dens[kg/m3],Temp[K],Kn' + self.newline_code)
-      file.write('zone t=time i= '+str(iteration/frequency_output)+' f=point' + self.newline_code )
-      for n in range(0,iteration):
+      # 実際に出力する点数（最終ステップを含む）。zone ヘッダの i= と実点数は一致していなければならない
+      num_output = iteration//frequency_output + 1
+      file.write('zone t=time i= '+str(num_output)+' f=point' + self.newline_code )
+      for n in range(0,iteration+1):
         if n%frequency_output == 0 :
           time_tmp = float(n)*dt
-          velo_abs = np.linalg.norm(velocity_pola)
           str_time = str( time_tmp ) + self.blank_code
           str_coord_cart = ''
           str_coord_geod = ''
@@ -256,46 +258,3 @@ class orbital(general):
       file.close()
 
     return
-
-
-
-  def routine_postprocess(self, config, iteration, meshnode_dict, meshelem_dict, metrics_dict, gas_property_dict, var_primitiv):
-
-    # Tecplot (not implemented yet)
-    #if ( config['post_process']['flag_output_tecplot'] ):
-    #  self.output_tecplot(config, dimension_dict, grid_list, geom_dict, iteration, var_primitiv, var_primitiv_bd, var_gradient, var_limiter)
-
-    # VTK
-    if config['post_process']['flag_output_vtk'] :
-      # -- Setting variables
-      scalar_dict, vector_dict = self.prepare_postprocess(config, gas_property_dict, metrics_dict, var_primitiv)
-
-      # -- Output
-      self.write_gmsh2vtk(config, iteration, meshnode_dict, meshelem_dict, scalar_dict=scalar_dict, vector_dict=vector_dict)
-
-    return
-
-
-  def prepare_postprocess(self, config, gas_property_dict, metrics_dict, var_primitiv):
-
-    specfic_heat_ratio = gas_property_dict['specfic_heat_ratio']
-
-    density      = var_primitiv[0,:]
-    temperature  = var_primitiv[4,:]
-    pressure     = var_primitiv[5,:]
-    velocity     = [ var_primitiv[1,:],var_primitiv[2,:],var_primitiv[3,:] ]
-    velocity_mag = np.sqrt( velocity[0]**2 + velocity[1]**2 + velocity[2]**2 )
-    speedofsound = self.get_speedofsound(specfic_heat_ratio, density, pressure)
-    machnumber   = velocity_mag/speedofsound
-
-    #volume = metrics_dict['volume_cell']
-    #cellcenter_list = metrics_dict['coord_cellcenter']
-    #cellcenter  = [ cellcenter_list[0],cellcenter_list[1],cellcenter_list[2] ]
-
-    scalar_dict = { 'density': density, 'temperature': temperature, 'pressure': pressure, 'machnumber': machnumber }
-    #scalar_dict = { 'density': density, 'temperature': temperature, 'pressure': pressure, 'machnumber': machnumber, 'volume':volume }
-    vector_dict = { 'velocity':velocity }
-    #vector_dict = { 'velocity':velocity, 'cellcenter':cellcenter }
-
-    return scalar_dict, vector_dict
-

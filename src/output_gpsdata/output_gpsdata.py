@@ -49,6 +49,31 @@ def output_routine(config, iteration, coordinate_dict, velocity_dict):
   return
 
 
+def resolve_kml_color(color_kml, simplekml):
+  # KML の色は aabbggrr の 16 進表記でなければ描画されない。
+  # config の linestyle_color は以下のいずれの書き方も受け付ける:
+  #   'ffffffff'              -- aabbggrr の 16 進表記（そのまま使用）
+  #   'white'                 -- simplekml の色名
+  #   'simplekml.Color.white' -- simplekml の属性表記（YAML 上では単なる文字列になる）
+
+  color_str = str(color_kml).strip()
+
+  prefix_tmp = 'simplekml.Color.'
+  if color_str.startswith(prefix_tmp) :
+    color_str = color_str[len(prefix_tmp):]
+
+  if len(color_str) == 8 and all( c in '0123456789abcdefABCDEF' for c in color_str ) :
+    return color_str.lower()
+
+  color_code = getattr(simplekml.Color, color_str.lower(), None)
+  if color_code is None :
+    print('Warning: linestyle_color in config is not a valid KML color:', color_kml)
+    print('--Use white instead.')
+    color_code = simplekml.Color.white
+
+  return color_code
+
+
 def output_kml(config, iteration, coordinate_dict, velocity_dict):
 
   import simplekml as simplekml
@@ -67,25 +92,33 @@ def output_kml(config, iteration, coordinate_dict, velocity_dict):
 
   print('Writing KML file... ', filename_tmp)
 
-  gps_linestrings = []
-  for n in range(0,iteration):
+  gps_coordinates = []
+  time_output     = []
+  for n in range(0,iteration+1):
     if n%frequency_output_kml == 0 :
       time_tmp = float(n)*dt
       lat_tmp = coordinate_geod[n][1]*rad2deg
       lon_tmp = coordinate_geod[n][0]*rad2deg
       alt_tmp = int(coordinate_geod[n][2])
-      gps_linestrings.append( [str(time_tmp), str(lon_tmp), str(lat_tmp), str(alt_tmp), str(linestyle_color_kml)] )
+      gps_coordinates.append( (lon_tmp, lat_tmp, alt_tmp) )
+      time_output.append( time_tmp )
+
+  if len(gps_coordinates) < 2 :
+    print('Warning: number of KML output points is', len(gps_coordinates))
+    print('--A LineString needs 2 points or more to be drawn. Check frequency_output of kml in config.')
 
   kml = simplekml.Kml()
 
-  for linestring in gps_linestrings:
-#    ls = kml.newlinestring(name=unicode(linestring[0], 'utf-8'))
-    ls = kml.newlinestring(name='Time_'+linestring[0])
-    ls.style.linestyle.color = linestring[4]
-    ls.style.linestyle.width = linestyle_width_kml
-    ls.extrude = extrude_kml
-    ls.altitudemode = simplekml.AltitudeMode.absolute
-    ls.coords = [(float(linestring[1]), float(linestring[2]), float(linestring[3]))]
+  # 軌道は 1 本の LineString にまとめる。
+  # 1 点しか持たない LineString を点数分並べても線分は描画されない。
+  ls = kml.newlinestring(name=gpx_case_name)
+  ls.coords = gps_coordinates
+  ls.style.linestyle.color = resolve_kml_color(linestyle_color_kml, simplekml)
+  ls.style.linestyle.width = linestyle_width_kml
+  ls.extrude = extrude_kml
+  ls.altitudemode = simplekml.AltitudeMode.absolute
+  if len(time_output) > 0 :
+    ls.description = 'Time: ' + str(time_output[0]) + ' - ' + str(time_output[-1]) + ' s'
 
   kml.save(filename_tmp)
 

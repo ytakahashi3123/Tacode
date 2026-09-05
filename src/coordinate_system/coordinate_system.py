@@ -4,6 +4,7 @@
 # Date: 2022/05/23
 
 import numpy as np
+import sys as sys
 
 tiny_value = 1.e-50
 
@@ -24,6 +25,16 @@ def convert_cartesian_geodetic(config, cartesian_coord):
   carcoord_z = cartesian_coord[2]
 
   radius_proj = np.sqrt( carcoord_x**2 + carcoord_y**2 )
+
+  # 極 (x=y=0) では radius_proj=0 となり E_geo_tmp/F_geo_tmp が 0 除算で nan になるため個別に扱う。
+  # 極上では経度が定義できないので 0 とする。
+  if radius_proj == 0.0 :
+    radius_polar_planet = radius_equat_planet * (1.0 - ellipticity_planet)
+    longitude = 0.0
+    latitude  = np.sign( carcoord_z ) * 0.5*np.pi
+    altitude  = np.abs( carcoord_z ) - radius_polar_planet
+    return [longitude, latitude, altitude]
+
   B_geo_tmp   = np.sign( carcoord_z ) * radius_equat_planet * (1.0 - ellipticity_planet)
   E_geo_tmp   = ( (carcoord_z + B_geo_tmp)*B_geo_tmp/radius_equat_planet - radius_equat_planet )/radius_proj
   F_geo_tmp   = ( (carcoord_z - B_geo_tmp)*B_geo_tmp/radius_equat_planet + radius_equat_planet )/radius_proj
@@ -44,7 +55,8 @@ def convert_cartesian_geodetic(config, cartesian_coord):
   T_geo_tmp = np.sqrt( G_geo_tmp**2 + (F_geo_tmp - V_geo_tmp*G_geo_tmp)/(2.0*G_geo_tmp - E_geo_tmp )) - G_geo_tmp
 
 # Longitude
-  longitude = np.sign(carcoord_y) * np.arccos( carcoord_x / np.sqrt( carcoord_x**2 + carcoord_y**2 ) )
+  # arctan2 を使う。sign(y)*arccos(x/r) は y=0, x<0（経度 180 度）で sign(0)=0 となり経度 0 度と誤算出される
+  longitude = np.arctan2( carcoord_y, carcoord_x )
 # Latitude
   latitude  = np.arctan( (1.0 - T_geo_tmp**2)*radius_equat_planet / (2.0 * B_geo_tmp * T_geo_tmp + tiny_value ))
 # Altitude
@@ -89,7 +101,8 @@ def set_angle_polar(config, coord):
   #
   radius      = np.sqrt( coord[0]**2 + coord[1]**2 + coord[2]**2 ) 
   angle_beta  = np.arcsin( coord[2]/np.sqrt( coord[0]**2 + coord[1]**2 + coord[2]**2 ) )
-  angle_alpha = np.arccos( coord[0]/np.sqrt( coord[0]**2 + coord[1]**2 )  ) * np.sign( coord[1] )
+  # arctan2 を使う（経度 180 度での誤算出を避ける。上の longitude と同じ理由）
+  angle_alpha = np.arctan2( coord[1], coord[0] )
 
   polar_coord =[radius, angle_beta, angle_alpha]
 
@@ -142,8 +155,8 @@ def convert_coordinate_rxyz(vec,angle_rot,axis):
   else :
     print( 'Axis is not correct.' )
     print( 'Program stopped. ')
-    exit()
-  
+    sys.exit(1)
+
   return [vec_conv_x,vec_conv_y,vec_conv_z]
 
 

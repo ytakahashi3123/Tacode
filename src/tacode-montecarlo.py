@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys as sys
 import numpy as np
 import os as os
 import shutil as shutil
@@ -38,4 +39,4 @@ if __name__ == '__main__':
 
   print('Finalizing Tacode-MonteCarlo')
 
-  exit()
+  sys.exit(0)

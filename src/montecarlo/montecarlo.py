@@ -22,7 +22,7 @@ class montecarlo(orbital):
     self.case_dir      = config['montecarlo']['case_dir']
 
     path_specify = config['montecarlo']['template_path_specify']
-    default_path = '/../../testcase_template' 
+    default_path = '/../../tutorial_template' 
     manual_path  = config['montecarlo']['template_path']
     self.template_path = self.get_directory_path(path_specify, default_path, manual_path)
 

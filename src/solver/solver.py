@@ -4,6 +4,7 @@
 # Date: 2022/05/31
 
 import numpy as np
+import sys as sys
 import atmosphere.atmosphere as atmosphere
 import coordinate_system.coordinate_system as coordinate_system
 import force_term.force_term as force_term
@@ -30,30 +31,38 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
   # Atmosphere model
   kind_atmosphere_model = config['atmosphere']['kind_atmosphere_model']
   if kind_atmosphere_model == 'constant' :
-    density_atmosphere     = config['atmosphere']['density']
-    temperature_atmosphere = config['atmosphere']['temperature']
+    # 定数モデルではループ内で更新されないので、ループで使う変数に直接与える
+    density     = config['atmosphere']['density']
+    temperature = config['atmosphere']['temperature']
+    try:
+      knudsen   = config['atmosphere']['knudsen']
+    except KeyError:
+      print('"knudsen" is not given in the atmosphere section of config.')
+      print('--It is required for kind_atmosphere_model: constant.')
+      print('Program stopped.')
+      sys.exit(1)
   elif kind_atmosphere_model == 'fileread' :
-    altitude_atmosphere    = atmosphere_dict['Height']
-    density_atmosphere     = atmosphere_dict['Mass_density']
-    temperature_atmosphere = atmosphere_dict['Temperature_neutral']
-    knudsen_atmosphere     = atmosphere_dict['Knudsen_number']
+    # 内挿・外挿に必要なものは atmosphere_dict に入っているのでそのまま渡す
+    pass
   else :
     print('kind_atmosphere_model in config is incorrect.')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   # Aerodynamic model
   kind_aerodynamic_model = config['satellite']['kind_aerodynamic_model']
   if kind_aerodynamic_model == 'constant' :
-    cdmean_aerodynamic   = config['satellite']['drag_coefficient']
+    # 定数モデルではループ内で更新されないので、ループで使う変数に直接与える
+    cdmean = config['satellite']['drag_coefficient']
   elif kind_aerodynamic_model == 'fileread' :
     knudsen_aerodynamic  = aerodynamic_dict['Knudsen_number']
     cdmean_aerodynamic   = aerodynamic_dict['CD_mean']
     altitude_aerodynamic = aerodynamic_dict['Altitude']
+    interpolator_aerodynamic = aerodynamic_dict[satellite.KEY_INTERP]
   else :
     print('kind_aerodynamic_model in config is incorrect.')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   # Force setting
   force = force_term.force_initialsettings(config)
@@ -77,7 +86,12 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
   print('Time elapsed (s):, Longitude (deg.), Latitude (deg.), Altitude (km), Velocity Mag. (m/s)')
 
   # Main routine
-  while time_elapsed <= config['computational_setup']['time_elapsed_maximum'] :
+  # 経過時間は累積加算せず初期値からのオフセットで求めるため、開始点を保存する
+  time_elapsed_initial = time_elapsed
+  iteration_initial    = iteration
+
+  # 条件を <= にすると time_elapsed == time_elapsed_maximum でも回り、1 ステップ余分に進む
+  while time_elapsed < config['computational_setup']['time_elapsed_maximum'] :
 
     coord_tmp = coordinate_cart[iteration]
     veloc_tmp = velocity_cart[iteration]
@@ -94,11 +108,17 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
       # Recalculate atmosphere status
       altitude_tmp = coord_geod[2] * orbital.m2km
       if kind_atmosphere_model == 'fileread' :
-        density, temperature, knudsen = atmosphere.get_atmosphere_property(altitude_tmp, altitude_atmosphere, density_atmosphere, temperature_atmosphere, knudsen_atmosphere)
+        density, temperature, knudsen = atmosphere.get_atmosphere_property(altitude_tmp, atmosphere_dict)
 
       # Aerodynamic coefficient
       if kind_aerodynamic_model == 'fileread' :
-        cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
+        cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic, interpolator_aerodynamic)
+
+      # 出力用の大気量
+      # --オイラー陽解法では現在位置での評価値がそのまま現在位置に対応する
+      density_output     = density
+      temperature_output = temperature
+      knudsen_output     = knudsen
 
       # Calculate force
       force = force_term.force_routine(config, coord_tmp, veloc_tmp,   \
@@ -131,11 +151,19 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
         # Recalculate atmosphere status
         altitude_tmp = coord_geod[2] * orbital.m2km
         if kind_atmosphere_model == 'fileread' :
-          density, temperature, knudsen = atmosphere.get_atmosphere_property(altitude_tmp, altitude_atmosphere, density_atmosphere, temperature_atmosphere, knudsen_atmosphere)
+          density, temperature, knudsen = atmosphere.get_atmosphere_property(altitude_tmp, atmosphere_dict)
 
         # Aerodynamic coefficient
         if kind_aerodynamic_model == 'fileread' :
-          cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
+          cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic, interpolator_aerodynamic)
+
+        # 出力用の大気量
+        # --1 段目は現在位置 r_n での評価値なので、これを出力に使う。
+        # --4 段目の値は r_{n+1} 近傍での評価値であり、r_n の行に並べると 1 ステップずれる。
+        if m == 0 :
+          density_output     = density
+          temperature_output = temperature
+          knudsen_output     = knudsen
 
         # External force (but "Delta V" is given here)
         # --Not yet
@@ -165,7 +193,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
     else :
       print('kind_time_scheme in config is incorrect.')
       print('Program stopped.')
-      exit()
+      sys.exit(1)
 
     # Residuals
     v_res = np.sqrt(v_res)
@@ -185,12 +213,13 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
     velocity_cart.append( veloc_tmp )
     velocity_pola.append( veloc_polar )
 
-    density_traj.append( density )
-    temperature_traj.append( temperature )
-    knudsen_traj.append( knudsen )
+    density_traj.append( density_output )
+    temperature_traj.append( temperature_output )
+    knudsen_traj.append( knudsen_output )
 
-    time_elapsed = time_elapsed + delta_time
     iteration    = iteration + 1
+    # 累積加算だと丸め誤差が乗るので、初期値からのオフセットで求める
+    time_elapsed = time_elapsed_initial + float(iteration - iteration_initial)*delta_time
 
     coord_geodetic_display = np.multiply(coord_geodetic, orbital.unit_convert_geoditic)
     veloc_polar_mag = np.linalg.norm(veloc_polar)
@@ -200,7 +229,32 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
     if coord_geodetic_display[2] <= 0.0 :
       break
 
-  return iteration, coordinate_dict, velocity_dict, trajectory_dict
+  if kind_atmosphere_model == 'fileread' :
+    altitude_top  = atmosphere_dict[atmosphere.KEY_Height][-1]
+    altitude_traj = np.array([coord[2] for coord in coordinate_geod])*orbital.m2km
+    num_above     = int(np.count_nonzero(altitude_traj > altitude_top))
+    if num_above > 0 :
+      if atmosphere_dict[atmosphere.KEY_SCALE_HEIGHT] is None :
+        treatment = 'clamped to the value at the top of the table'
+      else :
+        treatment = 'extrapolated with a scale height of {:.2f} km'.format(
+                    atmosphere_dict[atmosphere.KEY_SCALE_HEIGHT])
+      print('Note: {:d} of {:d} steps are above the atmosphere table ({:.1f} km).'.format(
+            num_above, len(altitude_traj), altitude_top))
+      print('--Maximum altitude: {:.1f} km. Atmospheric properties there are {:s}.'.format(
+            altitude_traj.max(), treatment))
+
+  # ループ終了後の最終位置における大気量を追加し、位置・速度の配列（iteration+1 個）と長さを揃える。
+  # これを行わないと出力ルーチンで最終ステップが欠落する。
+  coord_geod   = coordinate_system.convert_cartesian_geodetic(config, coordinate_cart[iteration])
+  altitude_tmp = coord_geod[2] * orbital.m2km
+  if kind_atmosphere_model == 'fileread' :
+    density, temperature, knudsen = atmosphere.get_atmosphere_property(altitude_tmp, atmosphere_dict)
+  density_traj.append( density )
+  temperature_traj.append( temperature )
+  knudsen_traj.append( knudsen )
+
+  return iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict
 
 
 def solve_eulerexplicit(dt, mass, force, coord_tmp, veloc_tmp, r_res, v_res):

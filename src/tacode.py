@@ -8,6 +8,7 @@
 # Date: 2024/01/10
 
 
+import sys as sys
 import numpy as np
 from orbital.orbital import orbital
 import atmosphere.atmosphere as atmosphere
@@ -37,7 +38,7 @@ def main():
   iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = orbital.initial_settings(config)
 
   # Main routine
-  iteration, coordinate_dict, velocity_dict, trajectory_dict = solver.solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, atmosphere_dict, aerodynamic_dict)
+  iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = solver.solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, atmosphere_dict, aerodynamic_dict)
 
   # Output : Geodetic data
   output_gpsdata.output_routine(config, iteration, coordinate_dict, velocity_dict)
@@ -63,4 +64,4 @@ if __name__ == '__main__':
 
   print('Finalizing Tacode')
 
-  exit()
+  sys.exit(0)

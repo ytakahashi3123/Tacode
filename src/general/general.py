@@ -3,9 +3,7 @@
 # Author: Y.Takahashi, Hokkaido University
 # Date: 2022/03/31
 
-import matplotlib
-#matplotlib.use('Agg')
-#import matplotlib.pyplot as plt
+import sys as sys
 import numpy as np
 
 
@@ -26,7 +24,6 @@ class general:
   def read_config_yaml(self, file_control):
 
     import yaml as yaml
-    import sys as sys
     #import pprint as pprint
 
     print("Reading control file...:", file_control)
