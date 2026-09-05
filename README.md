@@ -13,6 +13,12 @@ The aerodynamic force is given by atmospheric density, drag coefficient, charact
 The atmospheric data is given by NRLMSISE-00 Atmosphere Model.
 The equation of motion is numerically solved using fourth-order Runge-Kutta method in four stages.
 
+![Atmospheric-entry trajectories for initial velocities of 7250, 7450, and 7650 m/s](figure/trajectory.jpg)
+
+The trajectories above were written to `geodetic.kml` by the KML output and rendered
+in Google Earth. They are the `tutorial/work_reentry` case (7450 m/s) together with
+two runs of the same configuration at 7250 and 7650 m/s.
+
 ## Governing equation
 
 The governing equations are the three-degree-of-freedom motion equations for a mass point in a non-inertial coordinate system: the Earth-Centered Earth-Fixed (ECEF) coordinate systemm, which is express by
