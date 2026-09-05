@@ -24,6 +24,7 @@ satellite:
   drag_coefficient: 1.0
 
   # Drag coefficient (aerodynamic model: fileinput)
+  directory_path_specify: default # default or manual
   directory_aerodynamic: ../../database/aerodynamic
   filename_aerodynamic: aerodynamic.txt
 
@@ -73,8 +74,16 @@ atmosphere:
   density: 1.e-3
   # Temperature, K
   temperature: 300.0
+  # Knudsen number
+  knudsen: 1.0
+
+  # Treatment above the top of the atmosphere table
+  # --exponential: extrapolate with a scale height fitted to the top of the table
+  # --clamp: use the value at the top of the table (the behaviour before v2.1.1)
+  kind_extrapolation: exponential
 
   # Atmosphere model: file input
+  directory_path_specify: default # default or manual
   directory_atmosphere: ../../database/atmosphere
   filename_atmosphere: atmospheremodel.txt
 
@@ -147,8 +156,3 @@ post_process:
     filename_output: tecplot.dat
     # --Output frequency
     frequency_output: 1
-
-  # Output (VTK)  
-  flag_output_vtk: False
-  filename_output_vtk: output.vtk
-
