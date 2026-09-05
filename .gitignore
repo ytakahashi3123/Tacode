@@ -33,3 +33,7 @@ tutorial/work_montecarlo/work_montecarlo/
 # NOTE:
 # tutorial/work/output_result/ and tutorial/work/output_restart/ are tracked
 # on purpose as reference outputs. Do not ignore them.
+
+# Local-only notes (not published)
+CLAUDE.md
+CODE_REVIEW_*.md
