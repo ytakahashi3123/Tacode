@@ -218,6 +218,140 @@ class TestAerodynamicTable(unittest.TestCase):
             self.assertGreater(float(self._cd_at(knudsen)), 0.0)
 
 
+class TestAerodynamicTableAngleOfAttack(unittest.TestCase):
+    """
+    迎角依存の空力係数表（6 自由度計算用）。
+
+    従来の「AOA 0 だけ」のファイルもそのまま読めること、
+    迎角ブロックが複数あるときに (AOA, Kn) の 2 次元内挿になることを確かめる。
+    """
+
+    COLUMN_SPARE = '\t'.join(['0.0']*6)
+
+    def write_table(self, block, directory):
+        path = os.path.join(directory, 'aerodynamic_test.txt')
+        with open(path, 'w') as f:
+            f.write('test table\n')
+            f.write('variables = Kn, CFx, CFy, CFz, CMx, CMy, CMz, SDV..., Altitude\n')
+            for angle, rows in block:
+                if angle is not None:
+                    f.write('AOA {:g}\n'.format(angle))
+                for row in rows:
+                    f.write('\t'.join(['{:.18e}'.format(value) for value in row[0:7]])
+                            + '\t' + self.COLUMN_SPARE + '\t{:.18e}\n'.format(row[7]))
+        return path
+
+    def read_table(self, block):
+        with tempfile.TemporaryDirectory() as directory:
+            self.write_table(block, directory)
+            config = load_config()
+            config['satellite']['directory_path_specify'] = 'manual'
+            config['satellite']['directory_aerodynamic'] = directory
+            config['satellite']['filename_aerodynamic'] = 'aerodynamic_test.txt'
+            with quiet():
+                return satellite.initial_settings_satellite(config)
+
+    def test_table_without_an_aoa_line_is_read_as_zero(self):
+        rows = [[1.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0],
+                [10.0, 1.3, 0.0, 0.0, 0.0, 0.0, 0.0, 200.0]]
+        aerodynamic_dict = self.read_table([(None, rows)])
+
+        np.testing.assert_allclose(aerodynamic_dict[satellite.KEY_AOA], [0.0])
+        np.testing.assert_allclose(aerodynamic_dict[satellite.KEY_CD_MEAN], [1.2, 1.3])
+
+    def test_single_block_is_independent_of_the_angle_of_attack(self):
+        rows = [[1.0, 1.2, 0.0, -0.1, 0.0, -0.02, 0.0, 100.0],
+                [10.0, 1.3, 0.0, -0.1, 0.0, -0.02, 0.0, 200.0]]
+        aerodynamic_dict = self.read_table([(0.0, rows)])
+
+        for angle in (0.0, 30.0, 90.0):
+            force, moment = satellite.get_aerodynamic_coefficient_attitude(1.0, angle, aerodynamic_dict)
+            np.testing.assert_allclose(force, [1.2, 0.0, -0.1], atol=1.e-12)
+            np.testing.assert_allclose(moment, [0.0, -0.02, 0.0], atol=1.e-12)
+
+    def test_two_dimensional_interpolation_reproduces_the_nodes(self):
+        block = [(0.0,  [[1.0, 1.2, 0.0, 0.0, 0.0,  0.00, 0.0, 100.0],
+                         [10.0, 1.3, 0.0, 0.0, 0.0,  0.00, 0.0, 200.0]]),
+                 (20.0, [[1.0, 1.1, 0.0, 0.4, 0.0, -0.10, 0.0, 100.0],
+                         [10.0, 1.15, 0.0, 0.5, 0.0, -0.12, 0.0, 200.0]])]
+        aerodynamic_dict = self.read_table(block)
+
+        np.testing.assert_allclose(aerodynamic_dict[satellite.KEY_AOA], [0.0, 20.0])
+
+        force, moment = satellite.get_aerodynamic_coefficient_attitude(1.0, 0.0, aerodynamic_dict)
+        np.testing.assert_allclose(force, [1.2, 0.0, 0.0], atol=1.e-12)
+        force, moment = satellite.get_aerodynamic_coefficient_attitude(10.0, 20.0, aerodynamic_dict)
+        np.testing.assert_allclose(force, [1.15, 0.0, 0.5], atol=1.e-12)
+        np.testing.assert_allclose(moment, [0.0, -0.12, 0.0], atol=1.e-12)
+
+    def test_interpolates_linearly_between_the_blocks(self):
+        block = [(0.0,  [[1.0, 1.2, 0.0, 0.0, 0.0,  0.00, 0.0, 100.0],
+                         [10.0, 1.2, 0.0, 0.0, 0.0,  0.00, 0.0, 200.0]]),
+                 (20.0, [[1.0, 1.0, 0.0, 0.4, 0.0, -0.10, 0.0, 100.0],
+                         [10.0, 1.0, 0.0, 0.4, 0.0, -0.10, 0.0, 200.0]])]
+        aerodynamic_dict = self.read_table(block)
+
+        force, moment = satellite.get_aerodynamic_coefficient_attitude(1.0, 10.0, aerodynamic_dict)
+        np.testing.assert_allclose(force, [1.1, 0.0, 0.2], atol=1.e-12)
+        np.testing.assert_allclose(moment, [0.0, -0.05, 0.0], atol=1.e-12)
+
+    def test_values_are_clamped_outside_the_table(self):
+        block = [(0.0,  [[1.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0],
+                         [10.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 200.0]]),
+                 (20.0, [[1.0, 1.0, 0.0, 0.4, 0.0, -0.1, 0.0, 100.0],
+                         [10.0, 1.0, 0.0, 0.4, 0.0, -0.1, 0.0, 200.0]])]
+        aerodynamic_dict = self.read_table(block)
+
+        force_low, moment_low = satellite.get_aerodynamic_coefficient_attitude(0.01, -30.0, aerodynamic_dict)
+        np.testing.assert_allclose(force_low, [1.2, 0.0, 0.0], atol=1.e-12)
+        force_high, moment_high = satellite.get_aerodynamic_coefficient_attitude(1.e4, 90.0, aerodynamic_dict)
+        np.testing.assert_allclose(force_high, [1.0, 0.0, 0.4], atol=1.e-12)
+
+    def test_inconsistent_knudsen_numbers_are_rejected(self):
+        block = [(0.0,  [[1.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0],
+                         [10.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 200.0]]),
+                 (20.0, [[2.0, 1.0, 0.0, 0.4, 0.0, -0.1, 0.0, 100.0],
+                         [10.0, 1.0, 0.0, 0.4, 0.0, -0.1, 0.0, 200.0]])]
+        with self.assertRaises(SystemExit):
+            self.read_table(block)
+
+
+class TestSphereConeTable(unittest.TestCase):
+    """同梱の球円錐テーブル（6 自由度チュートリアル用）の性質。"""
+
+    @classmethod
+    def setUpClass(cls):
+        config = load_config()
+        config['satellite']['filename_aerodynamic'] = 'aerodynamic_spherecone_aoa.txt'
+        with quiet():
+            cls.aero = satellite.initial_settings_satellite(config)
+
+    def test_covers_the_whole_range_of_the_angle_of_attack(self):
+        aoa = self.aero[satellite.KEY_AOA]
+        self.assertAlmostEqual(aoa[0], 0.0)
+        self.assertAlmostEqual(aoa[-1], 180.0)
+
+    def test_is_statically_stable_about_zero_incidence(self):
+        # 復元モーメント: 迎角が正なら機首下げ（Cm < 0）
+        for knudsen in (1.e-3, 1.0, 1.e4):
+            for angle in (5.0, 10.0, 20.0, 40.0):
+                force, moment = satellite.get_aerodynamic_coefficient_attitude(knudsen, angle, self.aero)
+                self.assertLess(moment[1], 0.0)
+
+    def test_is_symmetric_at_zero_incidence(self):
+        for knudsen in (1.e-3, 1.0, 1.e4):
+            force, moment = satellite.get_aerodynamic_coefficient_attitude(knudsen, 0.0, self.aero)
+            self.assertGreater(force[0], 0.0)          # 軸力（= 迎角 0 での CD）は正
+            self.assertAlmostEqual(force[1], 0.0, places=9)
+            self.assertAlmostEqual(force[2], 0.0, places=9)
+            np.testing.assert_allclose(moment, np.zeros(3), atol=1.e-9)
+
+    def test_drag_is_larger_in_free_molecular_flow(self):
+        force_continuum, moment_continuum = satellite.get_aerodynamic_coefficient_attitude(1.e-4, 0.0, self.aero)
+        force_molecular, moment_molecular = satellite.get_aerodynamic_coefficient_attitude(1.e5, 0.0, self.aero)
+        self.assertGreater(force_molecular[0], force_continuum[0])
+
+
 if __name__ == '__main__':
     unittest.main()
 
