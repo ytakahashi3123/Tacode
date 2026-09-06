@@ -1,0 +1,225 @@
+
+computational_setup:
+  # Flag for initial or restart calculation
+  # --True: initial condition, False: restart
+  flag_initial: True
+
+  # Maximum time step, s
+  # --The attitude oscillation gets faster as the vehicle descends, so this case
+  #   stops at 1000 s (about 121 km). See the note on the timestep below.
+  time_elapsed_maximum: 1000.0
+
+
+satellite: 
+  # Mass, kg
+  mass: 10.0
+  # Characteristic area, m^2
+  characteristic_area: 0.78540
+  # Characteristic length, m
+  characteristic_length: 0.5
+
+  # Aerodynamic model
+  # --constant, or fileread
+  kind_aerodynamic_model: fileread
+
+  # Drag coefficient (aerodynamic_model: constant)
+  drag_coefficient: 1.0
+
+  # Drag coefficient (aerodynamic model: fileinput)
+  # --The 6-DOF computation needs a table that depends on the angle of attack,
+  #   otherwise no restoring (static) moment appears.
+  directory_path_specify: default # default or manual
+  directory_aerodynamic: ../../database/aerodynamic
+  filename_aerodynamic: aerodynamic_spherecone_aoa.txt
+
+initial_settings:
+  # Initial conditions 
+  # Initial coordinate, 1:Long.(deg) 2: Lat.(deg), 3:Alt.(km)
+  coordinate:
+    - 141.5
+    - 42.5
+    - 150.0
+  velocity:
+    - 7450
+    - 0
+    - 0
+  density_factor:
+    - 1.0
+
+  # Initial attitude (6-DOF), 3-2-1 Euler angles referred to the local horizon
+  # (geocentric NED), 1:Yaw(deg), 2:Pitch(deg), 3:Roll(deg)
+  # --Yaw is measured from the north towards the east, so yaw = 90 deg points the
+  #   nose east, i.e. along the initial velocity of this case.
+  # --Pitch = 20 deg therefore starts the vehicle at an angle of attack of 20 deg.
+  attitude:
+    - 90.0
+    - 20.0
+    -  0.0
+
+  # Initial angular velocity, body axes [p, q, r] in deg/s
+  # --Interpreted as the rate relative to the ECEF (rotating) frame.
+  angular_velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+
+
+planet:
+  # Gravitational constant, M.m2/kg2
+  gravitational_constant: 6.67408e-11
+  # Planet mass (Earth), kg
+  mass: 5.9723662e+24
+  # Planet radius on Equator, m
+  radius: 6.3781370e+6 
+  # Ellipticity 
+  ellipticity: 3.35281066474e-3
+  # Rotation rate, rad/s
+  rotation_rate: 7.292115e-5
+  # Dynamic form factor (J2) for potential calculation
+  potential_factor:
+    J2: 1.082629e-3
+    J22: -1.81222e-6
+    J3: -2.5356e-6 
+    J4: -1.62336e-6
+    Lambda22: -14.545   # Degree
+    
+
+atmosphere:
+  # Atmosphere model
+  # --constant, or fileread
+  kind_atmosphere_model: fileread
+
+  # Atmosphere model: constant settings
+  # Densitry, kg/m3
+  density: 1.e-3
+  # Temperature, K
+  temperature: 300.0
+
+  # Atmosphere model: file input
+  directory_path_specify: default # default or manual
+  directory_atmosphere: ../../database/atmosphere
+  filename_atmosphere: atmospheremodel.txt
+
+  
+time_integration:
+  # Time integration settings
+
+  # Time marching scheme: 
+  # --"explicit_euler", "implicit_lusgs"
+  kind_time_scheme: runge_kutta
+  #kind_time_scheme: explicit_euler
+
+  # constant timestep (s) for innerr loop in usteady computation
+  # valid when kind_time_determine: dt
+  # --The attitude oscillation is far faster than the orbital motion. The period of
+  #   this case is about 13 s at 150 km and shrinks in proportion to 1/sqrt(dynamic
+  #   pressure) as the vehicle descends. The code prints a warning when the timestep
+  #   no longer resolves it.
+  timestep_constant: 0.05
+
+  # Temporal accuracy using LUSGS unsteady simulation
+  # --2nd_backward_diff or 1st_backward_diff
+  kind_backward_difference: 2nd_backward_diff
+  #kind_backward_difference: 1st_backward_diff
+
+
+restart_process:
+
+  # Output directory
+  directory_output: output_restart
+
+  # Time series
+  # --True: stored individually as time series, False: stored by overwriting
+  flag_time_series: False
+
+  # Digid for step
+  # --for example, restart_0012.dat will be stored if using digid_step: 4
+  digid_step: 4
+
+  # Restart step for reading
+  restart_step: 500
+
+  # Restart file name (output)
+  file_restart: restart.dat
+
+  # Output frequency
+  # --The timestep is 0.05 s here, so writing every step would make the file huge.
+  frequency_output: 20
+
+
+attitude:
+  # 6-DOF (attitude) computation
+  # --True: solve the attitude as well, False (default): mass point, 3-DOF only
+  flag_attitude: True
+
+  # Moment of inertia about the centre of gravity, body axes, kg m2
+  # --Body axes are [forward, right, down]; x is the axis of symmetry here.
+  inertia_tensor:
+    Ixx: 0.75
+    Iyy: 0.50
+    Izz: 0.50
+    # Products of inertia (the off-diagonal entries of the tensor). Zero for a
+    # body symmetric about its axis.
+    Ixy: 0.0
+    Iyz: 0.0
+    Izx: 0.0
+
+  # Vector from the moment reference point of the aerodynamic table to the centre
+  # of gravity, body axes, m
+  # --The supplied sphere-cone table is already referred to its centre of gravity,
+  #   so this stays zero unless the mass properties are changed.
+  center_of_gravity:
+    - 0.0
+    - 0.0
+    - 0.0
+
+  # Dynamic damping derivatives (roll, pitch, yaw), 1/rad
+  # --M_damp = q S L * (L/2V) * [Clp*p, Cmq*q, Cnr*r]. They must be negative to damp.
+  damping_coefficient:
+    Clp: 0.0
+    Cmq: -0.5
+    Cnr: -0.5
+
+  # Static stability derivative Cm_alpha, 1/rad
+  # --Only used with satellite.kind_aerodynamic_model: constant, where the pitching
+  #   moment is modelled as Cm = Cma * (total angle of attack).
+  static_stability_derivative: -0.5
+
+  # Switches for the individual moment terms
+  flag_moment_aerodynamic: True
+  flag_moment_damping: True
+  flag_moment_gravity_gradient: True
+
+
+post_process:
+  # Output directory
+  directory_output: output_result
+
+  # Output (GPX)
+  flag_output_gpx: True
+  filename_output_gpx: geodetic.gpx
+
+  # Output (KML)
+  kml:
+    flag_output: True
+    # File name
+    filename_output: geodetic.kml
+    # --kml parameters
+    linestyle_color: simplekml.Color.white
+    linestyle_width: 4
+    extrude: 1
+    # --Output frequency
+    frequency_output: 200
+
+  # Output (Tecplot)  
+  tecplot:
+    flag_output: True
+    # File name
+    filename_output: tecplot.dat
+    # --Output frequency
+    frequency_output: 20
+
+  # Output (VTK)  
+  flag_output_vtk: False
+  filename_output_vtk: output.vtk
+
