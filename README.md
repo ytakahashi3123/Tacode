@@ -386,6 +386,39 @@ Tutorial cases:
 
 `tutorial_template` is the template used to create a new case (copy it to a new directory).
 
+Each case directory carries the tables it uses in its own `database` subdirectory, and
+`config.yml` points at them with a path relative to the current directory:
+
+```
+tutorial/work
+|-- config.yml
+|-- run_tacode.sh
+`-- database
+    |-- atmosphere
+    |   `-- atmospheremodel.txt
+    `-- aerodynamic
+        `-- aerodynamic.txt
+```
+
+```yaml
+satellite:
+  directory_path_specify: manual
+  directory_aerodynamic: database/aerodynamic
+  filename_aerodynamic: aerodynamic.txt
+
+atmosphere:
+  directory_path_specify: manual
+  directory_atmosphere: database/atmosphere
+  filename_atmosphere: atmospheremodel.txt
+```
+
+A case is therefore self-contained: it can be copied elsewhere, and its tables can be
+edited without touching any other case. The `database` directory at the top of the
+repository is the master copy that the cases are seeded from; it holds every table,
+including the ones a given case does not use. Setting `directory_path_specify` to
+`default` (or `auto`) reads that master copy instead, resolved from the location of the
+source file and independent of the current directory.
+
 Output is written to the directories named in `config.yml`:
 
 | Directory | File | Description |
@@ -629,9 +662,10 @@ Both give the same seven columns: height, O, N2, O2, total mass density, neutral
 temperature, N. Rows that are not seven numbers are skipped, so trailing blank or
 comment lines are harmless.
 
-Two tables are supplied in `database/atmosphere`. Switch between them with
+Two tables are supplied in the master `database/atmosphere`. Switch between them with
 `atmosphere.filename_atmosphere` alone — the format is detected, so nothing else
-changes.
+changes. A case directory carries only the table it uses, so copy the other one into
+`<case>/database/atmosphere` before naming it.
 
 | File | Altitude | Profile | Solar activity |
 |---|---|---|---|

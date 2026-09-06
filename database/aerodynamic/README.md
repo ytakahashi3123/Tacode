@@ -14,6 +14,11 @@ and interpolates them in the angle of attack as well.
 `tutorial_template`, and it is what the committed reference outputs were produced with.
 It stays unchanged.
 
+This directory is the master copy. Each case directory keeps the table it actually uses
+in `<case>/database/aerodynamic` and reads it from there — `aerodynamic.txt` for the
+3-DOF cases, `aerodynamic_spherecone_aoa.txt` for `tutorial/work_reentry_6dof`. Copy a
+table into that directory before naming it in `satellite.filename_aerodynamic`.
+
 **A table with a single angle of attack gives no restoring moment.** The coefficients
 are then the same whatever the attitude, so a 6-DOF run with `aerodynamic.txt` will
 tumble rather than oscillate about trim. The code prints a warning when this happens.

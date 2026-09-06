@@ -27,7 +27,7 @@ import unittest
 import numpy as np
 from scipy.special import ellipj
 
-from context import ROOT_DIR, quiet
+from context import ROOT_DIR, load_config, quiet
 
 import atmosphere.atmosphere as atmosphere
 import attitude.attitude as attitude
@@ -37,14 +37,12 @@ import satellite.satellite as satellite
 import solver.solver as solver
 from orbital.orbital import orbital
 
-import yaml
 
 CONFIG_6DOF = os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_6dof', 'config.yml')
 
 
 def load_config_6dof():
-    with open(CONFIG_6DOF) as f:
-        config = yaml.safe_load(f)
+    config = load_config(CONFIG_6DOF)
     config['post_process']['kml']['flag_output'] = False
     config['post_process']['tecplot']['flag_output'] = False
     return config

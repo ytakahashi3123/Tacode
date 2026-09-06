@@ -64,6 +64,17 @@ def read_tecplot(path):
     return header, rows
 
 
+def copy_case_database(config_path, workdir):
+    """ケースの database/ を作業ディレクトリへ複製する。
+
+    config は database を「カレントディレクトリ基準」で引くので、config だけを
+    一時ディレクトリへ写しても大気・空力のテーブルが見つからない。
+    """
+    source = os.path.join(os.path.dirname(config_path), 'database')
+    if os.path.isdir(source):
+        shutil.copytree(source, os.path.join(workdir, 'database'))
+
+
 def run_attitude_case():
     import yaml
 
@@ -81,6 +92,7 @@ def run_attitude_case():
     try:
         with open(os.path.join(workdir, 'config.yml'), 'w') as f:
             yaml.safe_dump(config, f)
+        copy_case_database(CONFIG_6DOF, workdir)
 
         completed = subprocess.run([sys.executable, TACODE],
                                    cwd=workdir, capture_output=True, text=True)
@@ -139,6 +151,7 @@ def main():
     workdir = tempfile.mkdtemp(prefix='tacode_smoke_')
     try:
         shutil.copy(CONFIG, os.path.join(workdir, 'config.yml'))
+        copy_case_database(CONFIG, workdir)
 
         print('Running the tutorial case in %s' % workdir)
         completed = subprocess.run([sys.executable, TACODE],

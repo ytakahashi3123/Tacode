@@ -82,6 +82,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/badconfig"
           sed 's/^  kind_atmosphere_model: .*/  kind_atmosphere_model: bogus/' \
             tutorial/work/config.yml > "$RUNNER_TEMP/badconfig/config.yml"
+          # ケースは自分の database/ を参照するので、それも一緒に持っていく
+          cp -r tutorial/work/database "$RUNNER_TEMP/badconfig/"
           cd "$RUNNER_TEMP/badconfig"
           if python "$GITHUB_WORKSPACE/src/tacode.py"; then
             echo "設定が不正なのに終了コード 0 で成功扱いになった"

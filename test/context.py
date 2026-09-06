@@ -35,7 +35,27 @@ def load_config(path=None):
     if path is None:
         path = os.path.join(ROOT_DIR, 'tutorial', 'work', 'config.yml')
     with open(path) as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+    return absolutize_database_path(config, os.path.dirname(os.path.abspath(path)))
+
+
+def absolutize_database_path(config, case_directory):
+    """
+    manual 指定のデータベースパスを、config が置かれたディレクトリ基準の絶対パスにする。
+
+    各ケースは自分の作業ディレクトリに database/ を持っており、ソルバーはそれを
+    カレントディレクトリ基準で解決する。テストは cd せずに走るので、ここで
+    config の場所に読み替えないとリポジトリ直下の database/ を掴んでしまう。
+    """
+    for section, key in (('satellite', 'directory_aerodynamic'),
+                         ('atmosphere', 'directory_atmosphere')):
+        block = config.get(section)
+        if not block or block.get('directory_path_specify') != 'manual':
+            continue
+        directory = block[key]
+        if not os.path.isabs(directory):
+            block[key] = os.path.normpath(os.path.join(case_directory, directory))
+    return config
 
 
 def two_body_config():

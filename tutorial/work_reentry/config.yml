@@ -24,8 +24,11 @@ satellite:
   drag_coefficient: 1.0
 
   # Drag coefficient (aerodynamic model: fileinput)
-  directory_path_specify: default # default or manual
-  directory_aerodynamic: ../../database/aerodynamic
+  # --manual: directory_aerodynamic below, relative to the current directory
+  # --default (or auto): <repo>/database/aerodynamic, resolved from the location
+  #   of the source file, independent of the current directory
+  directory_path_specify: manual # default or manual
+  directory_aerodynamic: database/aerodynamic
   filename_aerodynamic: aerodynamic.txt
 
 initial_settings:
@@ -75,8 +78,9 @@ atmosphere:
   temperature: 300.0
 
   # Atmosphere model: file input
-  directory_path_specify: default # default or manual
-  directory_atmosphere: ../../database/atmosphere
+  # --Path resolution is the same as satellite.directory_path_specify
+  directory_path_specify: manual # default or manual
+  directory_atmosphere: database/atmosphere
   filename_atmosphere: atmospheremodel.txt
 
   

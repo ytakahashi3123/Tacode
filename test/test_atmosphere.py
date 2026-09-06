@@ -322,6 +322,9 @@ class TestSphereConeTable(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         config = load_config()
+        # リポジトリ直下の database/ を見る（チュートリアルの作業ディレクトリには
+        # そのケースが使うテーブルしか置いていないため）
+        config['satellite']['directory_path_specify'] = 'default'
         config['satellite']['filename_aerodynamic'] = 'aerodynamic_spherecone_aoa.txt'
         with quiet():
             cls.aero = satellite.initial_settings_satellite(config)

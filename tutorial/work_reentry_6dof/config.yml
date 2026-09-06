@@ -28,8 +28,11 @@ satellite:
   # Drag coefficient (aerodynamic model: fileinput)
   # --The 6-DOF computation needs a table that depends on the angle of attack,
   #   otherwise no restoring (static) moment appears.
-  directory_path_specify: default # default or manual
-  directory_aerodynamic: ../../database/aerodynamic
+  # --manual: directory_aerodynamic below, relative to the current directory
+  # --default (or auto): <repo>/database/aerodynamic, resolved from the location
+  #   of the source file, independent of the current directory
+  directory_path_specify: manual # default or manual
+  directory_aerodynamic: database/aerodynamic
   filename_aerodynamic: aerodynamic_spherecone_aoa.txt
 
 initial_settings:
@@ -96,8 +99,9 @@ atmosphere:
   temperature: 300.0
 
   # Atmosphere model: file input
-  directory_path_specify: default # default or manual
-  directory_atmosphere: ../../database/atmosphere
+  # --Path resolution is the same as satellite.directory_path_specify
+  directory_path_specify: manual # default or manual
+  directory_atmosphere: database/atmosphere
   filename_atmosphere: atmospheremodel.txt
 
   

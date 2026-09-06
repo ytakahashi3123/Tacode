@@ -12,6 +12,11 @@ other setting has to change.
 `atmospheremodel.txt` is the default used by every case in `tutorial/` and
 `tutorial_template/`. It is kept unchanged as the reference table.
 
+This directory is the master copy. Each case directory keeps the table it actually uses
+in `<case>/database/atmosphere` and reads it from there, so to run a case against
+`atmospheremodel_700km.txt` copy the file into that directory first and then name it in
+`atmosphere.filename_atmosphere`.
+
 **The two are not interchangeable.** They were generated for different conditions, and
 the difference is large enough to matter:
 
