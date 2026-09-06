@@ -43,6 +43,22 @@ initial_settings:
   density_factor:
     - 1.0
 
+  # Initial attitude, only used when attitude.flag_attitude is True
+  # --3-2-1 Euler angles referred to the local horizon (geocentric NED),
+  #   1:Yaw(deg), 2:Pitch(deg), 3:Roll(deg). Yaw is measured from the north
+  #   towards the east.
+  attitude:
+    - 0.0
+    - 0.0
+    - 0.0
+
+  # Initial angular velocity, body axes [p, q, r] in deg/s, relative to the
+  # ECEF (rotating) frame. Only used when attitude.flag_attitude is True.
+  angular_velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+
 
 planet:
   # Gravitational constant, M.m2/kg2
@@ -127,6 +143,47 @@ restart_process:
 
   # Output frequency
   frequency_output: 1
+
+
+attitude:
+  # 6-DOF (attitude) computation
+  # --True: solve the attitude as well, False: mass point, 3-DOF only
+  # --The aerodynamic table must depend on the angle of attack, otherwise no
+  #   restoring moment appears. See database/aerodynamic/README.md.
+  flag_attitude: False
+
+  # Moment of inertia about the centre of gravity, body axes [forward, right, down], kg m2
+  inertia_tensor:
+    Ixx: 0.75
+    Iyy: 0.50
+    Izz: 0.50
+    # Products of inertia (the off-diagonal entries of the tensor)
+    Ixy: 0.0
+    Iyz: 0.0
+    Izx: 0.0
+
+  # Vector from the moment reference point of the aerodynamic table to the centre
+  # of gravity, body axes, m
+  center_of_gravity:
+    - 0.0
+    - 0.0
+    - 0.0
+
+  # Dynamic damping derivatives (roll, pitch, yaw), 1/rad
+  # --M_damp = q S L * (L/2V) * [Clp*p, Cmq*q, Cnr*r]. Negative values damp.
+  damping_coefficient:
+    Clp: 0.0
+    Cmq: 0.0
+    Cnr: 0.0
+
+  # Static stability derivative Cm_alpha, 1/rad
+  # --Only used with satellite.kind_aerodynamic_model: constant
+  static_stability_derivative: 0.0
+
+  # Switches for the individual moment terms
+  flag_moment_aerodynamic: True
+  flag_moment_damping: True
+  flag_moment_gravity_gradient: True
 
 
 post_process:

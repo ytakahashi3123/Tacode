@@ -2,10 +2,10 @@
 #!/usr/bin/env python3
 
 # Tacode: Trajectory analysis code
-# Version 2.1.1
+# Version 2.3.0
 
 # Author: Yusuke Takahashi, Hokkaido University
-# Date: 2024/01/10
+# Date: 2026/09/06
 
 
 import sys as sys
@@ -37,17 +37,22 @@ def main():
   # Initial setting
   iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = orbital.initial_settings(config)
 
+  # Initial setting of the attitude
+  # --None が返れば従来どおりの質点 3 自由度計算
+  attitude_dict = orbital.initial_settings_attitude(config, coordinate_dict, velocity_dict)
+
   # Main routine
-  iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = solver.solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, atmosphere_dict, aerodynamic_dict)
+  # --attitude_dict は他の辞書と同じくソルバー内で更新される
+  iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = solver.solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, atmosphere_dict, aerodynamic_dict, attitude_dict)
 
   # Output : Geodetic data
   output_gpsdata.output_routine(config, iteration, coordinate_dict, velocity_dict)
 
   # Output : Tecplot
-  orbital.output_tecplot(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict)
+  orbital.output_tecplot(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict)
 
   # Output restart
-  orbital.output_restart(config, iteration, time_elapsed, coordinate_dict['cartesian'], velocity_dict['cartesian'])
+  orbital.output_restart(config, iteration, time_elapsed, coordinate_dict['cartesian'], velocity_dict['cartesian'], attitude_dict)
 
   return
 

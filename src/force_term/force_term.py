@@ -14,7 +14,7 @@ def force_initialsettings(config):
   return force
 
 
-def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, cdmean_aerodynamic, density_factor, density, force):
+def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, cdmean_aerodynamic, density_factor, density, force, force_aerodynamic=None):
   
   potential_factor     = config['planet']['potential_factor']
   radius_equat_planet  = config['planet']['radius']
@@ -76,12 +76,19 @@ def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, 
 
 
   # Aerodynamic (Fx = 1/2 rho U^2 * Ux/U)
-  velocity_mag   = np.sqrt(velocity[0]**2+velocity[1]**2+velocity[2]**2)
-  fact_aero      = 0.50*density_factor*density*velocity_mag*area_satellite*cdmean_aerodynamic/mass_satellite
-  #"density factor" added by Tomoki Sakai 2023/2/3
-  force[4,0] = -fact_aero * velocity[0]
-  force[4,1] = -fact_aero * velocity[1]
-  force[4,2] = -fact_aero * velocity[2]
+  # --6 自由度計算では姿勢に応じた空力加速度（ECEF 成分）が呼び出し側で求まっているので、
+  #   それを与える。3 自由度では従来どおり速度方向の抗力のみ。
+  if force_aerodynamic is None :
+    velocity_mag   = np.sqrt(velocity[0]**2+velocity[1]**2+velocity[2]**2)
+    fact_aero      = 0.50*density_factor*density*velocity_mag*area_satellite*cdmean_aerodynamic/mass_satellite
+    #"density factor" added by Tomoki Sakai 2023/2/3
+    force[4,0] = -fact_aero * velocity[0]
+    force[4,1] = -fact_aero * velocity[1]
+    force[4,2] = -fact_aero * velocity[2]
+  else :
+    force[4,0] = force_aerodynamic[0]
+    force[4,1] = force_aerodynamic[1]
+    force[4,2] = force_aerodynamic[2]
 
 
   #print(force[1,:],force[2,:],force[3,:])

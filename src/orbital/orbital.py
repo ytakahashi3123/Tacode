@@ -4,6 +4,7 @@ import numpy as np
 import os as os
 import sys as sys
 from general.general import general
+import attitude.attitude as attitude
 import coordinate_system.coordinate_system as coordinate_system
 
 class orbital(general):
@@ -24,6 +25,9 @@ class orbital(general):
   KEY_VELOC_CARTESIAN = 'cartesian'
   KEY_VELOC_POLAR     = 'polar'
   
+  KEY_ATTITUDE_QUATERNION = 'quaternion'
+  KEY_ATTITUDE_OMEGA      = 'angular_velocity'
+
   KEY_TRAJECTORY_DENSITY     = 'density'
   KEY_TRAJECTORY_TEMPERATURE = 'temperature'
   KEY_TRAJECTORY_KNUDSEN     = 'knudsen'
@@ -145,12 +149,62 @@ class orbital(general):
     return iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict
 
 
-  def output_restart(self, config, iteration, time_elapsed, coordinate, velocity):
+  def initial_settings_attitude(self, config, coordinate_dict, velocity_dict):
+    #
+    # 姿勢（6 自由度）の初期条件。attitude.flag_attitude が False（既定）なら
+    # None を返し、呼び出し側は従来どおりの質点 3 自由度計算になる。
+    #
+    #  初期姿勢     : ローカル水平系（地心 NED）基準の 3-2-1 オイラー角 [ヨー, ピッチ, ロール], deg
+    #  初期角速度   : 機体軸成分の [p, q, r], deg/s。ECEF に対する角速度として解釈する
+    #                （内部状態は慣性系に対する角速度なので、ここで変換する）
+    #
+    section = attitude.get_setting(config, 'attitude', None)
+    if not bool( attitude.get_setting(section, 'flag_attitude', False) ) :
+      return None
+
+    print('Setting initial conditions of the attitude (6-DOF)')
+
+    if not config['computational_setup']['flag_initial'] :
+      print('Restart of the attitude computation is not implemented in this version.')
+      print('Program stopped')
+      sys.exit(1)
+
+    section_initial = attitude.get_setting(config, 'initial_settings', None)
+    euler_init = np.array( attitude.get_setting(section_initial, 'attitude', [0.0, 0.0, 0.0]), dtype=float )*self.deg2rad
+    omega_init = np.array( attitude.get_setting(section_initial, 'angular_velocity', [0.0, 0.0, 0.0]), dtype=float )*self.deg2rad
+
+    # 初期位置の地心経度・緯度でローカル水平系を決める
+    coordinate_polar = coordinate_dict[self.KEY_COORD_POLAR][0]
+    latitude  = coordinate_polar[1]
+    longitude = coordinate_polar[2]
+
+    quaternion_init = attitude.get_quaternion_from_euler(euler_init[0], euler_init[1], euler_init[2], longitude, latitude)
+
+    # ECEF 基準の角速度を慣性系基準に直す
+    matrix_be           = attitude.quaternion_to_matrix(quaternion_init)
+    omega_inertial_init = np.array(omega_init) \
+                        + attitude.get_earth_rate_body(config['planet']['rotation_rate'], matrix_be)
+
+    print('--Euler angle (yaw, pitch, roll, deg.):', euler_init*self.rad2deg)
+    print('--Quaternion (ECEF to body):', quaternion_init)
+
+    attitude_dict = {self.KEY_ATTITUDE_QUATERNION: [quaternion_init],
+                     self.KEY_ATTITUDE_OMEGA     : [omega_inertial_init]}
+
+    return attitude_dict
+
+
+  def output_restart(self, config, iteration, time_elapsed, coordinate, velocity, attitude_dict=None):
 
     dir_restart      = config['restart_process']['directory_output']
     file_restart     = config['restart_process']['file_restart']
     flag_time_series = config['restart_process']['flag_time_series']   # --True: stored individually as time series, False: stored by overwriting
     digid_step       = config['restart_process']['digid_step']
+    # 出力間隔。従来は読まれていなかったが、姿勢計算のように時間刻みが細かいと
+    # 全ステップ書き出すとファイルが巨大になるので有効にした。既定の 1 では従来と同じ
+    frequency_output = config['restart_process'].get('frequency_output', 1)
+    if frequency_output < 1 :
+      frequency_output = 1
 
     if flag_time_series :
       addfile = '_'+str(iteration).zfill(digid_step)
@@ -159,16 +213,36 @@ class orbital(general):
       filename_tmp = dir_restart + '/' + file_restart
 
     print('Writing restart data...:',filename_tmp)
-    
+
+    # 6 自由度計算のときだけ姿勢（クォータニオンと慣性系基準の角速度）を続けて書く
+    flag_attitude = attitude_dict is not None
+    if flag_attitude :
+      quaternion_list = attitude_dict[self.KEY_ATTITUDE_QUATERNION]
+      omega_list      = attitude_dict[self.KEY_ATTITUDE_OMEGA]
+
     # File open  
     file = open(filename_tmp, "w")
     file.write('# Restart data (ECEF, cartesian system)' + self.newline_code)
+    if flag_attitude :
+      file.write('# X, Y, Z, U, V, W, q0, q1, q2, q3, P, Q, R' + self.newline_code)
+      file.write('# --Quaternion: ECEF to body. Angular velocity: body axes, relative to the inertial frame' + self.newline_code)
+    if frequency_output != 1 :
+      file.write('# Output frequency: ' + str(frequency_output) + self.newline_code)
     file.write('# Iteration, Elapsed time' + self.newline_code)
     file.write('# '+ str(iteration) + self.blank_code + str(time_elapsed) + self.newline_code)
     for n in range(0,iteration+1):
+      # 最終ステップは間隔によらず必ず書く
+      if n%frequency_output != 0 and n != iteration :
+        continue
       str_coord = str(coordinate[n][0])+ self.blank_code +str(coordinate[n][1]) + self.blank_code + str(coordinate[n][2]) 
       vel_coord = str(velocity[n][0])  + self.blank_code +str(velocity[n][1])   + self.blank_code + str(velocity[n][2]) 
-      file.write( str_coord + self.blank_code + vel_coord + self.newline_code)
+      str_attitude = ''
+      if flag_attitude :
+        for m in range(0,4):
+          str_attitude = str_attitude + self.blank_code + str(quaternion_list[n][m])
+        for m in range(0,3):
+          str_attitude = str_attitude + self.blank_code + str(omega_list[n][m])
+      file.write( str_coord + self.blank_code + vel_coord + str_attitude + self.newline_code)
     file.close()
 
     return
@@ -209,7 +283,35 @@ class orbital(general):
     return iteration, time_elapsed, coordinate, velocity
 
 
-  def output_tecplot(self, config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict):
+  def get_attitude_output(self, config, coordinate_cartesian, velocity_cartesian, quaternion, omega_inertial, rotation_rate_planet):
+    #
+    # Tecplot に書き出す姿勢まわりの量を組み立てる。
+    #  クォータニオン（ECEF -> 機体）、ローカル水平基準のオイラー角、
+    #  ECEF に対する角速度（機体軸）、空力角。
+    # オイラー角と空力角は保存しておらず、ここで毎回作り直す。
+    # （そうすることで、位置・速度・姿勢の配列長のずれが入り込む余地が無くなる）
+    #
+    coordinate_polar = coordinate_system.set_angle_polar(config, coordinate_cartesian)
+    latitude  = coordinate_polar[1]
+    longitude = coordinate_polar[2]
+
+    yaw, pitch, roll = attitude.get_euler_angle(quaternion, longitude, latitude)
+
+    matrix_be      = attitude.quaternion_to_matrix(quaternion)
+    omega_relative = attitude.get_omega_relative(omega_inertial, rotation_rate_planet, matrix_be)
+    velocity_body  = np.dot(matrix_be, np.array(velocity_cartesian))
+
+    alpha, beta, alpha_total, phi_aero = attitude.get_aerodynamic_angle(velocity_body)
+
+    value_output = list(quaternion) \
+                 + [yaw*self.rad2deg, pitch*self.rad2deg, roll*self.rad2deg] \
+                 + list(np.array(omega_relative)*self.rad2deg) \
+                 + [alpha*self.rad2deg, beta*self.rad2deg, alpha_total*self.rad2deg]
+
+    return self.blank_code.join([str(value) for value in value_output])
+
+
+  def output_tecplot(self, config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict=None):
 
     if config['post_process']['tecplot']['flag_output'] :
 
@@ -224,6 +326,13 @@ class orbital(general):
       temperature_traj = trajectory_dict['temperature']
       knudsen_traj     = trajectory_dict['knudsen']
 
+      # Attitude (6-DOF)
+      flag_attitude = attitude_dict is not None
+      if flag_attitude :
+        quaternion_list      = attitude_dict[self.KEY_ATTITUDE_QUATERNION]
+        omega_list           = attitude_dict[self.KEY_ATTITUDE_OMEGA]
+        rotation_rate_planet = config['planet']['rotation_rate']
+
       # Config,
       filename_tmp = config['post_process']['directory_output'] + '/' + config['post_process']['tecplot']['filename_output']
       dt = config['time_integration']['timestep_constant']
@@ -233,7 +342,10 @@ class orbital(general):
       print('Writing Tecplot file... ', filename_tmp)
       file = open(filename_tmp, "w")
       file.write('# Tecplot data: Tacode' + self.newline_code)
-      file.write('Variables = Time[s],X[km],Y[km],Z[km],Long[deg.],Lati[deg.],Alti[km],Upl[m/s],Vpl[m/s],Wpl[m/s],VelplAbs[m/s],Dens[kg/m3],Temp[K],Kn' + self.newline_code)
+      variables_tmp = 'Variables = Time[s],X[km],Y[km],Z[km],Long[deg.],Lati[deg.],Alti[km],Upl[m/s],Vpl[m/s],Wpl[m/s],VelplAbs[m/s],Dens[kg/m3],Temp[K],Kn'
+      if flag_attitude :
+        variables_tmp = variables_tmp + ',q0,q1,q2,q3,Yaw[deg.],Pitch[deg.],Roll[deg.],P[deg/s],Q[deg/s],R[deg/s],AoA[deg.],Sideslip[deg.],AoAtotal[deg.]'
+      file.write(variables_tmp + self.newline_code)
       # 実際に出力する点数（最終ステップを含む）。zone ヘッダの i= と実点数は一致していなければならない
       num_output = iteration//frequency_output + 1
       file.write('zone t=time i= '+str(num_output)+' f=point' + self.newline_code )
@@ -254,7 +366,11 @@ class orbital(general):
           str_veloc_pola = str_veloc_pola + str(np.linalg.norm(velocity_pola[n])) + self.blank_code
           str_traj       = str(density_traj[n]) + self.blank_code + str(temperature_traj[n]) + self.blank_code + str(knudsen_traj[n]) 
           #
-          file.write( str_time  + str_coord_cart + str_coord_geod + str_veloc_pola + str_traj + self.newline_code)
+          str_attitude = ''
+          if flag_attitude :
+            str_attitude = self.blank_code + self.get_attitude_output(config, coordinate_cart[n], velocity_cart[n],
+                                                                      quaternion_list[n], omega_list[n], rotation_rate_planet)
+          file.write( str_time  + str_coord_cart + str_coord_geod + str_veloc_pola + str_traj + str_attitude + self.newline_code)
       file.close()
 
     return
