@@ -12,7 +12,7 @@
 #   ./setup_env.sh                 build (or reuse) ./.venv and install
 #   ./setup_env.sh --check         only report what is missing, install nothing
 #   ./setup_env.sh --upgrade       upgrade the packages in an existing venv
-#   ./setup_env.sh --with-optional also install gpxpy
+#   ./setup_env.sh --with-optional also install gpxpy and matplotlib
 #   ./setup_env.sh --venv <path>   use a different location for the venv
 #   ./setup_env.sh --python <cmd>  base interpreter (default: python3)
 #   ./setup_env.sh --help
@@ -29,7 +29,7 @@ MODE=install
 WITH_OPTIONAL=0
 
 REQUIRED_MODULES="numpy scipy yaml simplekml"
-OPTIONAL_MODULES="gpxpy"
+OPTIONAL_MODULES="gpxpy matplotlib"
 
 usage() {
   # ファイル先頭のコメントブロック（shebang の次から最初の非コメント行まで）をそのまま出す
