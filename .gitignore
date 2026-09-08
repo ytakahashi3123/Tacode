@@ -37,6 +37,7 @@ tutorial/work_montecarlo/work_montecarlo/
 # Local-only notes (not published)
 CLAUDE.md
 CODE_REVIEW_*.md
+references/
 
 # Jupyter
 .ipynb_checkpoints/

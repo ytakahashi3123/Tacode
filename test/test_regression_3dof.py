@@ -11,7 +11,9 @@ v2.3.0 で 6 自由度を足したときの受け入れ条件は「3 自由度�
 
 浮動小数点の最下位ビットは numpy/scipy の版で変わりうるので、比較は
 バイト単位ではなく相対誤差 1e-9 で行う（構造とロジックの退行はこれで十分捕まる）。
-バイト単位の一致を見たいときは CLAUDE.md の手順で直接 diff すること。
+分母には要素の値ではなく**その列の代表スケール（最大絶対値）**を使う。速度成分は
+ゼロを横切るので、値そのものを分母にすると、ほぼ 0 の点で丸め誤差が相対誤差として
+無限に効いてしまう。バイト単位の一致を見たいときは CLAUDE.md の手順で直接 diff すること。
 """
 
 import copy
@@ -22,7 +24,7 @@ import unittest
 
 import numpy as np
 
-from context import ROOT_DIR, load_config, quiet
+from context import ROOT_DIR, load_config, quiet, reference_mismatch
 
 import atmosphere.atmosphere as atmosphere
 import satellite.satellite as satellite
@@ -85,6 +87,12 @@ class TestReferenceOutputs(unittest.TestCase):
 
     CASES = ('work', 'work_reentry')
 
+    def assert_matches_reference(self, rows, rows_ref, label):
+        """参照出力と一致することを見る（判定は context.reference_mismatch と共有）。"""
+        message = reference_mismatch(rows, rows_ref, label, RELATIVE_TOLERANCE)
+        if message is not None:
+            self.fail(message)
+
     def check_case(self, case):
         reference_directory = os.path.join(ROOT_DIR, 'tutorial', case)
         config = load_config(os.path.join(reference_directory, 'config.yml'))
@@ -107,7 +115,7 @@ class TestReferenceOutputs(unittest.TestCase):
             self.assertEqual(rows.shape, rows_ref.shape)
 
             np.testing.assert_allclose(rows[:, 0], rows_ref[:, 0], rtol=0.0, atol=0.0)
-            np.testing.assert_allclose(rows, rows_ref, rtol=RELATIVE_TOLERANCE, atol=1.e-30)
+            self.assert_matches_reference(rows, rows_ref, 'tecplot.dat')
 
             # restart も行数と列数を見る（姿勢を書き足していないこと）
             with open(os.path.join(workdir, 'output_restart', 'restart.dat')) as f:
@@ -117,10 +125,10 @@ class TestReferenceOutputs(unittest.TestCase):
 
             self.assertEqual(len(lines), len(lines_ref))
             self.assertTrue(all(len(line.split()) == 6 for line in lines))
-            np.testing.assert_allclose(
+            self.assert_matches_reference(
                 np.array([[float(word) for word in line.split()] for line in lines]),
                 np.array([[float(word) for word in line.split()] for line in lines_ref]),
-                rtol=RELATIVE_TOLERANCE, atol=1.e-30)
+                'restart.dat')
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 

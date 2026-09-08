@@ -19,6 +19,7 @@ SRC_DIR = os.path.join(ROOT_DIR, 'src')
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
+import numpy as np  # noqa: E402
 import yaml  # noqa: E402
 
 
@@ -85,3 +86,38 @@ def two_body_config():
 def gravitational_parameter(config):
     """GM [m^3/s^2]"""
     return config['planet']['gravitational_constant'] * config['planet']['mass']
+
+
+def reference_mismatch(rows, rows_ref, label, tolerance):
+    """
+    参照出力との一致を、列ごとの代表スケールを基準にして検査する。
+
+    許容できるずれは「その列の最大絶対値 x tolerance」。要素の値そのものを
+    分母にすると、ゼロを横切る列（速度成分やクォータニオン）のほぼ 0 の点で
+    丸め誤差が相対誤差として無限に効いてしまう。実際 work_reentry の
+    restart.dat は v_y = -0.087 m/s の行（前後は -8.2 と +7.7 m/s）で絶対差
+    2.2e-10 m/s が相対差 2.5e-9 と判定され、numpy の版によって落ちていた。
+
+    参照が厳密に 0 の列は許容 0、つまり厳密一致を要求する（構造的に 0 の列に
+    値が入ったら退行なので）。
+
+    戻り値は一致すれば None、しなければ失敗メッセージ（3 自由度・6 自由度の
+    回帰テストが共有する）。
+    """
+    rows = np.asarray(rows, dtype=float)
+    rows_ref = np.asarray(rows_ref, dtype=float)
+
+    scale = np.abs(rows_ref).max(axis=0)
+    allowed = tolerance*scale
+    excess = np.abs(rows - rows_ref) - allowed
+    if excess.max() <= 0.0:
+        return None
+
+    row, column = np.unravel_index(np.argmax(excess), excess.shape)
+    return ('{} が参照出力と一致しない: [{}, {}] = {!r} (期待 {!r})\n'
+            '  絶対差 {:.6e} > 許容 {:.6e} (列のスケール {:.6e} x {:g})\n'
+            '  許容を超えた要素: {} / {}'.format(
+                label, row, column, rows[row, column], rows_ref[row, column],
+                abs(rows[row, column] - rows_ref[row, column]), allowed[column],
+                scale[column], tolerance,
+                int((excess > 0.0).sum()), excess.size))

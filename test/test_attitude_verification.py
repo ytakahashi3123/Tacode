@@ -653,5 +653,224 @@ class TestAxisymmetryOfTheAerodynamics(unittest.TestCase):
         np.testing.assert_allclose(self.moment[1, :], np.zeros(3), atol=1.e-12)
 
 
+class TestFullInertiaTensor(unittest.TestCase):
+    """
+    8. 慣性乗積を持つ（主軸でない）剛体のトルクフリー運動。
+
+    ソルバーを通る検証はこれまですべて対角の慣性テンソルだった。慣性乗積が
+    入るのは moment_initialsettings の組み立てを見る単体テストだけで、
+    **Euler 方程式とクォータニオン積分を通した検査が無かった**。
+
+    ここでは主軸系で厳密解の分かっている剛体を、わざと主軸でない機体軸で与える。
+      I_body = R^T diag(I1,I2,I3) R      （R は機体軸 -> 主軸の受動回転）
+      omega_body(0) = R^T omega_principal(0)
+    ソルバーの答えを主軸系に戻せば、2. と同じ Jacobi の楕円関数解に一致しなければ
+    ならない。非対角成分の置き方（-Ixy ではなくテンソルの成分そのもの）と、
+    慣性テンソルの逆行列を使う経路がここで初めて厳密解に照らされる。
+    """
+
+    # 主軸系での慣性主軸モーメントと初期角速度は 2. と同じものを使う
+    INERTIA_PRINCIPAL = (1.0, 2.0, 3.0)
+    OMEGA_PRINCIPAL = np.array([0.8, 0.0, 0.5])
+    # 非対角成分が 3 つとも十分大きくなる向きを選んである
+    AXIS = [1.0, -1.0, 2.0]
+    ANGLE = 40.0
+    TIME_MAX = 20.0
+    TIMESTEP = 0.02
+
+    @classmethod
+    def setUpClass(cls):
+        inertia_1, inertia_2, inertia_3 = cls.INERTIA_PRINCIPAL
+        cls.inertia_principal = np.diag(cls.INERTIA_PRINCIPAL)
+
+        # 機体軸 -> 主軸の受動回転
+        cls.matrix_principal = rotation_matrix_passive(cls.AXIS, cls.ANGLE*orbital.deg2rad)
+        cls.inertia_body = np.dot(cls.matrix_principal.T,
+                                  np.dot(cls.inertia_principal, cls.matrix_principal))
+
+        omega_body = np.dot(cls.matrix_principal.T, cls.OMEGA_PRINCIPAL)
+
+        # 楕円関数解のパラメータ（主軸系で立てる。2. と同じ式）
+        energy_twice = float(np.dot(cls.OMEGA_PRINCIPAL,
+                                    np.dot(cls.inertia_principal, cls.OMEGA_PRINCIPAL)))
+        momentum_square = float(np.linalg.norm(np.dot(cls.inertia_principal,
+                                                      cls.OMEGA_PRINCIPAL))**2)
+        cls.amplitude = [
+            np.sqrt((energy_twice*inertia_3 - momentum_square)/(inertia_1*(inertia_3 - inertia_1))),
+            np.sqrt((energy_twice*inertia_3 - momentum_square)/(inertia_2*(inertia_3 - inertia_2))),
+            np.sqrt((momentum_square - energy_twice*inertia_1)/(inertia_3*(inertia_3 - inertia_1)))]
+        cls.rate = np.sqrt((inertia_3 - inertia_2)*(momentum_square - energy_twice*inertia_1)
+                           / (inertia_1*inertia_2*inertia_3))
+        cls.modulus = (inertia_2 - inertia_1)*(energy_twice*inertia_3 - momentum_square) \
+                    / ((inertia_3 - inertia_2)*(momentum_square - energy_twice*inertia_1))
+
+        inertia_setting = {'Ixx': cls.inertia_body[0, 0],
+                           'Iyy': cls.inertia_body[1, 1],
+                           'Izz': cls.inertia_body[2, 2],
+                           'Ixy': cls.inertia_body[0, 1],
+                           'Iyz': cls.inertia_body[1, 2],
+                           'Izx': cls.inertia_body[2, 0]}
+
+        config = vacuum_config(inertia_setting, omega_body, rotation_rate=0.0)
+        config['computational_setup']['time_elapsed_maximum'] = cls.TIME_MAX
+        config['time_integration']['timestep_constant'] = cls.TIMESTEP
+        cls.result = run_solver(config)
+
+    @classmethod
+    def omega_exact_principal(cls, time):
+        sn, cn, dn, phase = ellipj(cls.rate*time, cls.modulus)
+        return np.array([cls.amplitude[0]*cn, cls.amplitude[1]*sn, cls.amplitude[2]*dn])
+
+    def test_the_tensor_really_is_not_diagonal(self):
+        # 「対角のまま通ってしまった」のではないことの確認
+        off_diagonal = [self.inertia_body[0, 1], self.inertia_body[1, 2], self.inertia_body[2, 0]]
+        self.assertGreater(min(abs(value) for value in off_diagonal), 0.1)
+        # 主軸モーメントは与えたとおり（回転で固有値は変わらない）
+        np.testing.assert_allclose(np.sort(np.linalg.eigvalsh(self.inertia_body)),
+                                   np.array(self.INERTIA_PRINCIPAL), atol=1.e-12)
+
+    def test_the_solver_assembled_the_tensor_that_was_asked_for(self):
+        with quiet():
+            moment, property_dict = moment_term.moment_initialsettings(
+                {'attitude': {'inertia_tensor': {'Ixx': self.inertia_body[0, 0],
+                                                 'Iyy': self.inertia_body[1, 1],
+                                                 'Izz': self.inertia_body[2, 2],
+                                                 'Ixy': self.inertia_body[0, 1],
+                                                 'Iyz': self.inertia_body[1, 2],
+                                                 'Izx': self.inertia_body[2, 0]}}})
+        np.testing.assert_allclose(property_dict[moment_term.KEY_INERTIA],
+                                   self.inertia_body, atol=1.e-14)
+
+    def test_angular_velocity_matches_the_elliptic_solution_in_principal_axes(self):
+        worst = 0.0
+        for n in range(0, self.result['iteration']+1, 10):
+            time = float(n)*self.TIMESTEP
+            omega_principal = np.dot(self.matrix_principal, self.result['omega'][n])
+            worst = max(worst, np.linalg.norm(omega_principal - self.omega_exact_principal(time)))
+        self.assertLess(worst, 1.e-9)
+
+    def test_the_body_frame_solution_is_not_the_principal_one(self):
+        # 主軸系に戻す操作が効いていること（戻さずに比べたら合わないこと）
+        worst = 0.0
+        for n in range(0, self.result['iteration']+1, 10):
+            time = float(n)*self.TIMESTEP
+            worst = max(worst, np.linalg.norm(np.array(self.result['omega'][n])
+                                              - self.omega_exact_principal(time)))
+        self.assertGreater(worst, 0.1)
+
+    def test_energy_and_momentum_are_conserved_with_the_full_tensor(self):
+        history = np.array(self.result['omega'])
+        energy = [0.5*float(np.dot(omega, np.dot(self.inertia_body, omega))) for omega in history]
+        momentum = [float(np.linalg.norm(np.dot(self.inertia_body, omega))) for omega in history]
+
+        # 対角の場合（test_solver_attitude）より 1 桁ほど緩い。角速度そのものの
+        # 打ち切り誤差（上の楕円関数解との差 1e-9）と釣り合う水準である
+        self.assertLess(abs(energy[-1]/energy[0] - 1.0), 1.e-9)
+        self.assertLess(abs(momentum[-1]/momentum[0] - 1.0), 1.e-9)
+
+    def test_the_momentum_vector_is_fixed_in_inertial_space(self):
+        momentum = []
+        for n in range(0, self.result['iteration']+1):
+            matrix_be = attitude.quaternion_to_matrix(self.result['quaternion'][n])
+            momentum.append(np.dot(matrix_be.T, np.dot(self.inertia_body, self.result['omega'][n])))
+        for vector in momentum:
+            np.testing.assert_allclose(vector, momentum[0], atol=1.e-10)
+
+
+class TestRollInvarianceOfTheAerodynamics(unittest.TestCase):
+    """
+    9. 空力の軸対称性を「恒等式」として押さえる。
+
+    迎角だけで引く係数表を全迎角で引き、matrix_aerodynamic_roll で実際の横流れ面へ
+    回す実装は、機体が回転体であることを仮定している。その仮定は
+      「速度を固定したまま機体をその x 軸まわりに回しても、
+        空力の力とモーメントは（ECEF 成分で）変わらない」
+    という恒等式と同じである。7. は「力が面内・モーメントが面に垂直」を見るが、
+    ロールに対する不変性は見ていない。
+
+    **非軸対称な機体を入れればこの恒等式は破れる。そして現在の実装はそれを
+    表現できない**（係数表に迎角以外の自由度が無い）。したがってこのテストは
+    実装の検証であると同時に、適用範囲の記録でもある。
+    """
+
+    ROLL = (0.0, 17.0, 90.0, 180.0, 263.0)
+
+    @classmethod
+    def setUpClass(cls):
+        config = load_config_6dof()
+        config['attitude']['center_of_gravity'] = [0.0, 0.0, 0.0]
+        cls.config = config
+        with quiet():
+            cls.aerodynamic_dict = satellite.initial_settings_satellite(config)
+            cls.moment, cls.property_dict = moment_term.moment_initialsettings(config)
+
+        cls.coordinate = np.array([4.0e6, 3.0e6, 3.5e6])
+        cls.velocity = np.array([1000.0, -6000.0, 4000.0])
+
+    def state_rolled(self, roll):
+        """
+        全迎角を保ったまま、機体をその x 軸まわりに roll だけ回した状態の空力。
+        戻り値は ECEF 成分の力と空力（静的）モーメント。
+        """
+        # 迎角 25 度になるように機体軸を組む
+        axis_flow = self.velocity/np.linalg.norm(self.velocity)
+        side = np.cross([0.0, 0.0, 1.0], axis_flow)
+        side = side/np.linalg.norm(side)
+        angle = 25.0*orbital.deg2rad
+        axis_x = np.cos(angle)*axis_flow + np.sin(angle)*side
+        axis_y = np.cross(side, axis_x)
+        axis_y = axis_y/np.linalg.norm(axis_y)
+        matrix_be = np.array([axis_x, axis_y, np.cross(axis_x, axis_y)])
+
+        # 機体軸まわりのロールを足す（機体 x 軸は動かない）
+        matrix_be = np.dot(rotation_matrix_passive([1.0, 0.0, 0.0], roll*orbital.deg2rad),
+                           matrix_be)
+        quaternion = attitude.matrix_to_quaternion(matrix_be)
+
+        force, moment_total, omega_relative = solver.get_aerodynamic_state(
+            self.config, self.property_dict, self.aerodynamic_dict, 'fileread',
+            self.coordinate, self.velocity, quaternion, np.zeros(3),
+            self.config['satellite']['mass'], self.config['satellite']['characteristic_area'],
+            self.config['satellite']['characteristic_length'],
+            1.e-7, 1.0, 1.0, 1.0, 0.0,
+            0.0, self.moment)
+
+        matrix_be = attitude.quaternion_to_matrix(quaternion)
+        return np.array(force), np.dot(matrix_be.T, self.moment[1, :])
+
+    def test_rolling_the_body_about_its_axis_changes_nothing(self):
+        force_reference, moment_reference = self.state_rolled(0.0)
+
+        # 検査が空回りしていないこと
+        self.assertGreater(np.linalg.norm(force_reference), 1.e-12)
+        self.assertGreater(np.linalg.norm(moment_reference), 1.e-12)
+
+        for roll in self.ROLL:
+            force, moment = self.state_rolled(roll)
+            np.testing.assert_allclose(force, force_reference,
+                                       rtol=1.e-12, atol=1.e-14*np.linalg.norm(force_reference),
+                                       err_msg='ロール {} deg で力が変わった'.format(roll))
+            np.testing.assert_allclose(moment, moment_reference,
+                                       rtol=1.e-12, atol=1.e-14*np.linalg.norm(moment_reference),
+                                       err_msg='ロール {} deg でモーメントが変わった'.format(roll))
+
+    def test_the_supplied_table_is_itself_axisymmetric(self):
+        #
+        # 上の恒等式が成り立つ前提は「表が回転体のもの」であること。付属の
+        # 球円錐テーブルは全迎角で CFy = CMx = CMz = 0 でなければならない。
+        # 非軸対称な表を入れると、matrix_aerodynamic_roll が黙って誤った向きへ
+        # 回すので、ここで表の側の前提も記録しておく。
+        #
+        for angle in np.linspace(0.0, 180.0, 37):
+            force, moment = satellite.get_aerodynamic_coefficient_attitude(
+                1.0, float(angle), self.aerodynamic_dict)
+            self.assertLess(abs(force[1]), 1.e-12,
+                            'AOA {} deg で CFy が 0 でない'.format(angle))
+            self.assertLess(abs(moment[0]), 1.e-12,
+                            'AOA {} deg で CMx が 0 でない'.format(angle))
+            self.assertLess(abs(moment[2]), 1.e-12,
+                            'AOA {} deg で CMz が 0 でない'.format(angle))
+
+
 if __name__ == '__main__':
     unittest.main()
