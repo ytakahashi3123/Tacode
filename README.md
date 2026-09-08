@@ -553,7 +553,7 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | `test_coordinate_system.py` | Round trips between the Cartesian, geodetic and polar systems; behaviour at longitude 180 deg, at the poles and on the equator |
 | `test_force_term.py` | The gravity vector equals `-grad U` for a potential written independently from the README; the Coriolis, centrifugal and drag terms |
 | `test_kepler.py` | Energy and angular momentum are conserved in the two-body limit (J terms, rotation and drag switched off); RK4 converges at fourth order |
-| `test_atmosphere.py` | Table interpolation reproduces the nodes, clamps outside the table range, and scales the Knudsen number with the characteristic length |
+| `test_atmosphere.py` | Table interpolation reproduces the nodes, clamps outside the table range, and scales the Knudsen number with the characteristic length; the aerodynamic table is read in both formats, and its axisymmetry is checked so that a table a 6-DOF run cannot represent is reported rather than used silently |
 | `test_solver_invariants.py` | The time loop stops at the requested time, all history arrays share one length, the atmospheric values line up with the position of the same index, and the Tecplot header matches the number of rows |
 | `test_attitude.py` | Quaternion, Euler-angle and local-horizon conversions round trip and agree with analytic rotations and with the frame the initial velocity already uses; the quaternion kinematics reproduce a constant-rate rotation and drop the Earth rate |
 | `test_moment_term.py` | Torque-free motion conserves the angular momentum and the energy, an axisymmetric body precesses at the analytic rate, the gravity-gradient torque matches its closed form and vanishes for an isotropic body, and the damping term removes rotational energy |
@@ -561,6 +561,8 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | `test_regression_3dof.py` | With the attitude switched off, both tutorial cases reproduce the reference outputs committed in `tutorial/`, and a configuration carrying an `attitude` section set to `False` gives exactly the same trajectory as one without the section |
 | `test_helper_visualization.py` | The post-processing tools in `src_helper/`: the Tecplot reader on both a 3-DOF and a 6-DOF output, the vehicle shapes (front distinguishable from back, roll visible), and the animation script writing an actual still, an `.html` animation as one self-contained file, and an `.mp4`. The drawing tests are skipped when matplotlib is not installed, and the `.mp4` one when `ffmpeg` is not |
 | `test_attitude_verification.py` | Problems whose answer is known in closed form, solved by the production solver: the order of convergence, the Jacobi-elliptic solution of the torque-free asymmetric body, conservation of the angular momentum vector in inertial space, the precession of an axisymmetric body, the logarithmic decrement of a damped oscillation, the gravity-gradient libration frequency in a circular orbit, and the axisymmetry of the tabulated aerodynamics |
+| `test_regression_6dof.py` | The 6-DOF tutorial case, run for its full 1000 s, reproduces the `tecplot.dat`, `restart.dat` and `geodetic.kml` committed in `tutorial/work_reentry_6dof` |
+| `test_timestep_attitude.py` | The timestep itself: the `T/20` criterion the solver warns at is the first one whose numerical damping disappears, the order of convergence survives the atmosphere table, the angle-of-attack table is only C0 and costs the fourth order, and the shipped `dt = 0.05 s` is converged |
 
 `test/smoke_tutorial.py` is separate from the suite above: it runs the tutorial
 case end to end in a temporary directory and inspects the three output files, then
@@ -768,6 +770,18 @@ coefficients independent of the attitude, so no restoring moment appears and the
 tumbles. The code warns about this at the start of the run. The sphere-cone table
 supplied for the tutorial is an analytic model, not measured data; its assumptions and
 their consequences are listed in `database/aerodynamic/README.md`.
+
+**The body is assumed to be axisymmetric.** The table is looked up with the total angle
+of attack alone and the coefficient vectors are then rotated about the body x axis onto
+the actual crossflow plane, which is exact only for a body of revolution. Such a body
+has `CFy = CMx = CMz = 0` everywhere in the table; if those columns are not zero, they
+are rotated as if they lay in the crossflow plane and the side force and the rolling and
+yawing moments point in the wrong direction, with no way to recover the right one from a
+table that has no sideslip dependence. Tacode therefore checks the columns when it reads
+a table for a 6-DOF run and warns, naming the offending ones, rather than answering
+silently; see `database/aerodynamic/README.md` for the threshold. A genuinely
+non-axisymmetric vehicle needs both the table and the rotation extended to the sideslip
+angle.
 
 The angle of attack is measured against the ECEF velocity, that is, the atmosphere is
 assumed to co-rotate with the Earth. Winds are not modelled.

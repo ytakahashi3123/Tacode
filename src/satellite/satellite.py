@@ -3,6 +3,7 @@
 import numpy as np
 import os as os
 import scipy.interpolate
+import attitude.attitude as attitude
 
 # Dict key
 KEY_LENGTH   = 'characteristic_length'
@@ -20,9 +21,14 @@ KEY_AOA     = 'Angle_of_attack'
 KEY_CF      = 'Force_coefficient'
 KEY_CM      = 'Moment_coefficient'
 KEY_COEF    = 'Coefficient'
+KEY_FILE    = 'Filename'
 
 # 空力データベースの列数（Kn, CFx..CMz, SDV_CFx..SDV_CMz, Altitude）
 NUM_COLUMN_AERODYNAMIC = 14
+
+# 軸対称性の判定: 面内成分に対する比の閾値と、丸め誤差を拾わないための下限
+TOLERANCE_AXISYMMETRY = 1.e-3
+FLOOR_AXISYMMETRY     = 1.e-12
 
 
 def initial_settings_satellite(config):
@@ -31,7 +37,83 @@ def initial_settings_satellite(config):
 
   aerodynamic_dict = set_interpolator(aerodynamic_dict)
 
+  # 軸対称性の検査は、姿勢を解いていて、かつ係数を表から引くときだけ意味を持つ
+  # （3 自由度では表から CFx しか使わず、constant の空力モデルでは表そのものを使わない）
+  section = attitude.get_setting(config, 'attitude', None)
+  if bool( attitude.get_setting(section, 'flag_attitude', False) ) and \
+     config['satellite']['kind_aerodynamic_model'] == 'fileread' :
+    warn_if_not_axisymmetric(aerodynamic_dict)
+
   return aerodynamic_dict
+
+
+def check_axisymmetry(aerodynamic_dict):
+  #
+  # 係数表が軸対称の機体のものかどうかを見る。
+  #
+  # 6 自由度では表を全迎角 alpha_total だけで引き、attitude.matrix_aerodynamic_roll で
+  # 係数ベクトルを実際の横流れ面へ回す。この扱いが厳密なのは軸対称の機体だけで、
+  # そのとき表は全迎角・全 Knudsen 数で CFy = CMx = CMz = 0 になる（横流れ面の中では
+  # 横力もロール・ヨーのモーメントも立たない）。表にこれらが残っていると、ロール行列は
+  # それを面内の量として黙って誤った向きへ回す。表に迎角以外の姿勢変数が無い以上、
+  # 正しい向きを復元する手段は無いので、検出して知らせるしかない。
+  #
+  # 判定は面内成分に対する比で行う（係数の絶対値は代表長さ・代表面積の取り方で変わる）。
+  # CFy は max(|CFx|, |CFz|) に対して、CMx と CMz は max(|CMy|) に対して見る。
+  # 代表スケールが 0 に潰れている表もあるので、下限 FLOOR_AXISYMMETRY を併せて使う
+  # （解析モデルの表に残る 1e-17 級の丸め誤差を拾わないため）。
+  #
+  # 戻り値は逸脱した成分の一覧（軸対称なら空）。
+  #
+  angle_of_attack    = aerodynamic_dict[KEY_AOA]
+  knudsen            = aerodynamic_dict[KEY_KN]
+  coefficient_force  = aerodynamic_dict[KEY_CF]
+  coefficient_moment = aerodynamic_dict[KEY_CM]
+
+  scale_force  = np.abs( coefficient_force[:,:,[0,2]] ).max()
+  scale_moment = np.abs( coefficient_moment[:,:,1] ).max()
+
+  component_asymmetric = ( ('CFy', coefficient_force[:,:,1],  scale_force ),
+                           ('CMx', coefficient_moment[:,:,0], scale_moment),
+                           ('CMz', coefficient_moment[:,:,2], scale_moment) )
+
+  violation = []
+  for name, component, scale in component_asymmetric:
+    magnitude = np.abs(component).max()
+    if magnitude <= max( TOLERANCE_AXISYMMETRY*scale, FLOOR_AXISYMMETRY ) :
+      continue
+    index_aoa, index_knudsen = np.unravel_index( np.argmax(np.abs(component)), component.shape )
+    violation.append( {'name'           : name,
+                       'magnitude'      : magnitude,
+                       'ratio'          : magnitude/scale if scale > 0.0 else float('inf'),
+                       'angle_of_attack': angle_of_attack[index_aoa],
+                       'knudsen'        : knudsen[index_knudsen]} )
+
+  return violation
+
+
+def warn_if_not_axisymmetric(aerodynamic_dict):
+  # 軸対称でない係数表を 6 自由度で使おうとしていることを知らせる。
+  # 停止はしない（表そのものは読めているし、迎角面内の力とモーメントは使えるため）。
+
+  violation = check_axisymmetry(aerodynamic_dict)
+  if len(violation) == 0 :
+    return False
+
+  print('Warning: the aerodynamic table is not that of an axisymmetric body.')
+  print('--File:', aerodynamic_dict[KEY_FILE])
+  for item in violation:
+    print('--{} reaches {:.4e} ({:.2e} of the in-plane coefficients) at AOA {:g} deg., Kn {:.4e}'.format(
+          item['name'], item['magnitude'], item['ratio'], item['angle_of_attack'], item['knudsen']))
+  print('--The 6-DOF computation looks the table up with the total angle of attack alone and')
+  print('--rotates the coefficients into the actual sideslip plane. That is exact only for an')
+  print('--axisymmetric body, whose table has CFy = CMx = CMz = 0 everywhere. The components')
+  print('--above are rotated as if they lay in that plane, so the side force and the rolling')
+  print('--and yawing moments will point in the wrong direction.')
+  print('--Use an axisymmetric table, or extend the table and the rotation to the sideslip')
+  print('--angle as well.')
+
+  return True
 
 
 def set_interpolator(aerodynamic_dict):
@@ -112,7 +194,8 @@ def read_aerodynamic_file(config):
   print('--Angles of attack in the table (deg.):', ', '.join(['{:g}'.format(value) for value in angle_of_attack]))
 
   aerodynamic_dict = {KEY_KN:kn_aero, KEY_CD_MEAN:cfx_mean, KEY_ALT:alt_aero,
-                      KEY_AOA:angle_of_attack, KEY_CF:coefficient_force, KEY_CM:coefficient_moment}
+                      KEY_AOA:angle_of_attack, KEY_CF:coefficient_force, KEY_CM:coefficient_moment,
+                      KEY_FILE:filename_tmp}
 
   return aerodynamic_dict
 

@@ -58,6 +58,26 @@ so `CFx` at 0° is the ordinary drag coefficient, and a statically stable body h
 vectors are rotated about the body x axis onto the actual crossflow plane, which is
 exact for a body of revolution.
 
+**The 6-DOF computation therefore assumes an axisymmetric body.** The table is looked
+up with the total angle of attack alone, so it carries no sideslip dependence, and an
+axisymmetric body has `CFy = CMx = CMz = 0` over the whole table: no side force, no
+rolling and no yawing moment inside the crossflow plane. If those columns are not zero,
+the rotation moves them as if they lay in that plane, and the side force and the rolling
+and yawing moments end up pointing in the wrong direction — the table does not hold
+enough information to recover the right one.
+
+Tacode checks this when the table is read for a 6-DOF run and prints a warning naming
+the offending columns; it does not stop, since the in-plane coefficients are still
+usable. A column counts as non-zero when it exceeds 1e-3 of the in-plane coefficients
+it is compared against (`CFy` against `max(|CFx|, |CFz|)`, `CMx` and `CMz` against
+`max(|CMy|)`), which passes the round-off of an analytically generated table. The
+warning is only raised for `kind_aerodynamic_model: fileread` with
+`attitude.flag_attitude: True`; a 3-DOF run reads `CFx` alone and is unaffected.
+
+`aerodynamic.txt` triggers it: `CMx` and `CMz` reach 2% and 7% of `CMy`, which is
+measurement scatter of a nominally axisymmetric capsule rather than a real asymmetry.
+It is harmless in the 3-DOF runs the table is meant for.
+
 The moments are about the reference point the table was generated for. If the centre of
 gravity is elsewhere, give the offset in `attitude.center_of_gravity` and the code moves
 the moments for you.

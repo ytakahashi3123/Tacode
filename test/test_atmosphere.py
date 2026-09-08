@@ -13,6 +13,48 @@ import atmosphere.atmosphere as atmosphere
 import satellite.satellite as satellite
 
 
+TABLE_FILENAME = 'aerodynamic_test.txt'
+COLUMN_SPARE = '\t'.join(['0.0']*6)
+
+
+def write_aerodynamic_table(block, directory):
+    """
+    合成の空力係数表を書く。
+
+    block は (迎角, 行の並び) の並びで、行は
+    [Kn, CFx, CFy, CFz, CMx, CMy, CMz, Altitude]。迎角に None を渡すと
+    "AOA" 行を書かない（従来形式のファイル）。標準偏差の 6 列は 0 で埋める。
+    """
+    path = os.path.join(directory, TABLE_FILENAME)
+    with open(path, 'w') as f:
+        f.write('test table\n')
+        f.write('variables = Kn, CFx, CFy, CFz, CMx, CMy, CMz, SDV..., Altitude\n')
+        for angle, rows in block:
+            if angle is not None:
+                f.write('AOA {:g}\n'.format(angle))
+            for row in rows:
+                f.write('\t'.join(['{:.18e}'.format(value) for value in row[0:7]])
+                        + '\t' + COLUMN_SPARE + '\t{:.18e}\n'.format(row[7]))
+    return path
+
+
+def aerodynamic_config(directory):
+    """合成テーブルを指す config を返す。"""
+    config = load_config()
+    config['satellite']['directory_path_specify'] = 'manual'
+    config['satellite']['directory_aerodynamic'] = directory
+    config['satellite']['filename_aerodynamic'] = TABLE_FILENAME
+    return config
+
+
+def read_aerodynamic_table(block):
+    """合成テーブルを一時ディレクトリに書いて読み込む。"""
+    with tempfile.TemporaryDirectory() as directory:
+        write_aerodynamic_table(block, directory)
+        with quiet():
+            return satellite.initial_settings_satellite(aerodynamic_config(directory))
+
+
 class TestAtmosphereTable(unittest.TestCase):
 
     @classmethod
@@ -226,35 +268,10 @@ class TestAerodynamicTableAngleOfAttack(unittest.TestCase):
     迎角ブロックが複数あるときに (AOA, Kn) の 2 次元内挿になることを確かめる。
     """
 
-    COLUMN_SPARE = '\t'.join(['0.0']*6)
-
-    def write_table(self, block, directory):
-        path = os.path.join(directory, 'aerodynamic_test.txt')
-        with open(path, 'w') as f:
-            f.write('test table\n')
-            f.write('variables = Kn, CFx, CFy, CFz, CMx, CMy, CMz, SDV..., Altitude\n')
-            for angle, rows in block:
-                if angle is not None:
-                    f.write('AOA {:g}\n'.format(angle))
-                for row in rows:
-                    f.write('\t'.join(['{:.18e}'.format(value) for value in row[0:7]])
-                            + '\t' + self.COLUMN_SPARE + '\t{:.18e}\n'.format(row[7]))
-        return path
-
-    def read_table(self, block):
-        with tempfile.TemporaryDirectory() as directory:
-            self.write_table(block, directory)
-            config = load_config()
-            config['satellite']['directory_path_specify'] = 'manual'
-            config['satellite']['directory_aerodynamic'] = directory
-            config['satellite']['filename_aerodynamic'] = 'aerodynamic_test.txt'
-            with quiet():
-                return satellite.initial_settings_satellite(config)
-
     def test_table_without_an_aoa_line_is_read_as_zero(self):
         rows = [[1.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0],
                 [10.0, 1.3, 0.0, 0.0, 0.0, 0.0, 0.0, 200.0]]
-        aerodynamic_dict = self.read_table([(None, rows)])
+        aerodynamic_dict = read_aerodynamic_table([(None, rows)])
 
         np.testing.assert_allclose(aerodynamic_dict[satellite.KEY_AOA], [0.0])
         np.testing.assert_allclose(aerodynamic_dict[satellite.KEY_CD_MEAN], [1.2, 1.3])
@@ -262,7 +279,7 @@ class TestAerodynamicTableAngleOfAttack(unittest.TestCase):
     def test_single_block_is_independent_of_the_angle_of_attack(self):
         rows = [[1.0, 1.2, 0.0, -0.1, 0.0, -0.02, 0.0, 100.0],
                 [10.0, 1.3, 0.0, -0.1, 0.0, -0.02, 0.0, 200.0]]
-        aerodynamic_dict = self.read_table([(0.0, rows)])
+        aerodynamic_dict = read_aerodynamic_table([(0.0, rows)])
 
         for angle in (0.0, 30.0, 90.0):
             force, moment = satellite.get_aerodynamic_coefficient_attitude(1.0, angle, aerodynamic_dict)
@@ -274,7 +291,7 @@ class TestAerodynamicTableAngleOfAttack(unittest.TestCase):
                          [10.0, 1.3, 0.0, 0.0, 0.0,  0.00, 0.0, 200.0]]),
                  (20.0, [[1.0, 1.1, 0.0, 0.4, 0.0, -0.10, 0.0, 100.0],
                          [10.0, 1.15, 0.0, 0.5, 0.0, -0.12, 0.0, 200.0]])]
-        aerodynamic_dict = self.read_table(block)
+        aerodynamic_dict = read_aerodynamic_table(block)
 
         np.testing.assert_allclose(aerodynamic_dict[satellite.KEY_AOA], [0.0, 20.0])
 
@@ -289,7 +306,7 @@ class TestAerodynamicTableAngleOfAttack(unittest.TestCase):
                          [10.0, 1.2, 0.0, 0.0, 0.0,  0.00, 0.0, 200.0]]),
                  (20.0, [[1.0, 1.0, 0.0, 0.4, 0.0, -0.10, 0.0, 100.0],
                          [10.0, 1.0, 0.0, 0.4, 0.0, -0.10, 0.0, 200.0]])]
-        aerodynamic_dict = self.read_table(block)
+        aerodynamic_dict = read_aerodynamic_table(block)
 
         force, moment = satellite.get_aerodynamic_coefficient_attitude(1.0, 10.0, aerodynamic_dict)
         np.testing.assert_allclose(force, [1.1, 0.0, 0.2], atol=1.e-12)
@@ -300,7 +317,7 @@ class TestAerodynamicTableAngleOfAttack(unittest.TestCase):
                          [10.0, 1.2, 0.0, 0.0, 0.0, 0.0, 0.0, 200.0]]),
                  (20.0, [[1.0, 1.0, 0.0, 0.4, 0.0, -0.1, 0.0, 100.0],
                          [10.0, 1.0, 0.0, 0.4, 0.0, -0.1, 0.0, 200.0]])]
-        aerodynamic_dict = self.read_table(block)
+        aerodynamic_dict = read_aerodynamic_table(block)
 
         force_low, moment_low = satellite.get_aerodynamic_coefficient_attitude(0.01, -30.0, aerodynamic_dict)
         np.testing.assert_allclose(force_low, [1.2, 0.0, 0.0], atol=1.e-12)
@@ -313,7 +330,7 @@ class TestAerodynamicTableAngleOfAttack(unittest.TestCase):
                  (20.0, [[2.0, 1.0, 0.0, 0.4, 0.0, -0.1, 0.0, 100.0],
                          [10.0, 1.0, 0.0, 0.4, 0.0, -0.1, 0.0, 200.0]])]
         with self.assertRaises(SystemExit):
-            self.read_table(block)
+            read_aerodynamic_table(block)
 
 
 class TestSphereConeTable(unittest.TestCase):
@@ -355,8 +372,131 @@ class TestSphereConeTable(unittest.TestCase):
         self.assertGreater(force_molecular[0], force_continuum[0])
 
 
-if __name__ == '__main__':
-    unittest.main()
+class TestAxisymmetryOfTheAerodynamicTable(unittest.TestCase):
+    """
+    係数表の軸対称性の検査。
+
+    6 自由度では表を全迎角だけで引き、attitude.matrix_aerodynamic_roll で実際の
+    横流れ面へ回す。これが厳密なのは軸対称の機体だけで、そのとき表は全迎角・全 Kn で
+    CFy = CMx = CMz = 0 になる。非軸対称の表を入れると、その 3 成分が面内の量として
+    誤った向きへ回されるが、表に迎角以外の姿勢変数が無いので正しい向きは復元できない。
+    黙って誤った答えを出さないよう、読み込み時に警告することにした（v2.3.1）。
+    """
+
+    def synthetic_table(self, cfy=0.0, cmx=0.0, cmz=0.0, cfx=1.2, cfz=0.4, cmy=-0.1):
+        # 迎角 0 は軸対称（横流れが無い）、迎角 20 deg 側に非対称成分を入れる
+        return [(0.0,  [[1.0,  cfx, 0.0, 0.0, 0.0, 0.0, 0.0, 100.0],
+                        [10.0, cfx, 0.0, 0.0, 0.0, 0.0, 0.0, 200.0]]),
+                (20.0, [[1.0,  cfx, cfy, cfz, cmx, cmy, cmz, 100.0],
+                        [10.0, cfx, cfy, cfz, cmx, cmy, cmz, 200.0]])]
+
+    def check(self, **keyword):
+        aerodynamic_dict = read_aerodynamic_table(self.synthetic_table(**keyword))
+        return satellite.check_axisymmetry(aerodynamic_dict)
+
+    def names(self, violation):
+        return [item['name'] for item in violation]
+
+    def test_an_axisymmetric_table_passes(self):
+        self.assertEqual(self.check(), [])
+
+    def test_the_shipped_spherecone_table_is_axisymmetric(self):
+        """6 自由度チュートリアルの表は解析モデルなので厳密に軸対称（残る 1e-17 は丸め誤差）。"""
+        config = load_config()
+        config['satellite']['directory_path_specify'] = 'default'
+        config['satellite']['filename_aerodynamic'] = 'aerodynamic_spherecone_aoa.txt'
+        with quiet():
+            aerodynamic_dict = satellite.initial_settings_satellite(config)
+
+        self.assertEqual(satellite.check_axisymmetry(aerodynamic_dict), [])
+        self.assertGreater(np.abs(aerodynamic_dict[satellite.KEY_CM][:,:,1]).max(), 0.0)
+
+    def test_the_shipped_egg_table_is_flagged_for_its_moments(self):
+        """
+        3 自由度用の EGG の表（DSMC+CFD）は計測のばらつきで CMx と CMz が残っている。
+
+        3 自由度では CFx しか使わないので無害だが、6 自由度に持ち込むと
+        ロール・ヨーが立つ。CFy は CFx の 4e-4 しかないので閾値には掛からない。
+        """
+        with quiet():
+            aerodynamic_dict = satellite.initial_settings_satellite(load_config())
+
+        self.assertEqual(self.names(satellite.check_axisymmetry(aerodynamic_dict)), ['CMx', 'CMz'])
+
+    def test_a_side_force_is_detected(self):
+        violation = self.check(cfy=0.05)
+
+        self.assertEqual(self.names(violation), ['CFy'])
+        self.assertAlmostEqual(violation[0]['magnitude'], 0.05)
+        self.assertAlmostEqual(violation[0]['ratio'], 0.05/1.2)
+        self.assertAlmostEqual(violation[0]['angle_of_attack'], 20.0)
+
+    def test_a_rolling_and_a_yawing_moment_are_detected(self):
+        self.assertEqual(self.names(self.check(cmx=0.01)), ['CMx'])
+        self.assertEqual(self.names(self.check(cmz=0.01)), ['CMz'])
+        self.assertEqual(self.names(self.check(cfy=0.05, cmx=0.01, cmz=0.01)), ['CFy', 'CMx', 'CMz'])
+
+    def test_the_threshold_is_relative_to_the_in_plane_coefficients(self):
+        tolerance = satellite.TOLERANCE_AXISYMMETRY
+        self.assertEqual(self.check(cfy=0.5*tolerance*1.2), [])
+        self.assertEqual(self.names(self.check(cfy=2.0*tolerance*1.2)), ['CFy'])
+        # モーメントは CMy に対して見るので、CMy を大きくすれば同じ CMx が埋もれる
+        self.assertEqual(self.names(self.check(cmx=1.e-3, cmy=-0.1)), ['CMx'])
+        self.assertEqual(self.check(cmx=1.e-3, cmy=-10.0), [])
+
+    def test_round_off_dust_is_ignored(self):
+        """解析モデルの表に残る 1e-17 級の値で警告を出さない（面内が 0 のときも）。"""
+        self.assertEqual(self.check(cfy=1.e-17, cmx=1.e-17, cmz=1.e-17), [])
+        self.assertEqual(self.check(cfy=1.e-17, cmx=1.e-17, cmz=1.e-17, cmy=0.0), [])
+
+    def test_a_component_is_detected_when_the_in_plane_moment_vanishes(self):
+        """CMy が 0 の表でも、ロール・ヨーが立っていれば軸対称ではない。"""
+        violation = self.check(cmx=1.e-6, cmy=0.0)
+
+        self.assertEqual(self.names(violation), ['CMx'])
+        self.assertEqual(violation[0]['ratio'], float('inf'))
+
+    def test_the_warning_names_the_file_and_the_components(self):
+        aerodynamic_dict = read_aerodynamic_table(self.synthetic_table(cfy=0.05, cmz=0.01))
+        with quiet() as output:
+            flag_warned = satellite.warn_if_not_axisymmetric(aerodynamic_dict)
+        message = output.getvalue()
+
+        self.assertTrue(flag_warned)
+        self.assertIn('Warning', message)
+        self.assertIn(TABLE_FILENAME, message)
+        # 逸脱した成分だけが報告されること（説明文にも成分名が出るので行で見る）
+        reported = [line.split()[0].lstrip('-') for line in message.splitlines() if 'reaches' in line]
+        self.assertEqual(reported, ['CFy', 'CMz'])
+
+    def test_the_warning_appears_only_when_the_attitude_is_solved(self):
+        """3 自由度では CFy も CM も使わないので、警告は出さない。"""
+        with tempfile.TemporaryDirectory() as directory:
+            write_aerodynamic_table(self.synthetic_table(cfy=0.05), directory)
+
+            config = aerodynamic_config(directory)
+            with quiet() as output:
+                satellite.initial_settings_satellite(config)
+            self.assertNotIn('Warning', output.getvalue())
+
+            config = aerodynamic_config(directory)
+            config['attitude'] = {'flag_attitude': True}
+            with quiet() as output:
+                aerodynamic_dict = satellite.initial_settings_satellite(config)
+            self.assertIn('Warning', output.getvalue())
+
+            # 空力モデルが constant なら表そのものを使わないので黙る
+            config = aerodynamic_config(directory)
+            config['attitude'] = {'flag_attitude': True}
+            config['satellite']['kind_aerodynamic_model'] = 'constant'
+            with quiet() as output:
+                satellite.initial_settings_satellite(config)
+            self.assertNotIn('Warning', output.getvalue())
+
+        # 警告であって停止ではない: 表はそのまま使える
+        self.assertIn(satellite.KEY_INTERP, aerodynamic_dict)
+        force, moment = satellite.get_aerodynamic_coefficient_attitude(1.0, 20.0, aerodynamic_dict)
+        self.assertAlmostEqual(force[1], 0.05)
 
 
 class TestFileFormats(unittest.TestCase):
@@ -476,3 +616,8 @@ class TestFileFormats(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 with quiet():
                     atmosphere.read_atmosphere_file(self._config_for(directory))
+
+
+
+if __name__ == '__main__':
+    unittest.main()
