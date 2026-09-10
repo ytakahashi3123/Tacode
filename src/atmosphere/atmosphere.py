@@ -29,6 +29,12 @@ KEY_Temperature_neutral = 'Temperature_neutral'
 # テーブル上端でスケールハイトをフィットする高度幅, km
 RANGE_FIT_SCALE_HEIGHT = 50.0
 
+# 指数外挿の指数の上限（スケールハイトの何個分まで外挿するか）
+# --exp(-100) = 3.7e-44 で密度は事実上 0、Kn は 2.7e43 倍。ここから先は
+#   真空・自由分子流の極限で値が変わらないので、同じ値で扱う。
+#   上限を置かないと exp がアンダーフローして Kn が Inf になり、出力に Inf が載る
+EXPONENT_MAXIMUM = 100.0
+
 # テーブル範囲外の扱い
 KIND_EXTRAPOLATION_EXPONENTIAL = 'exponential'
 KIND_EXTRAPOLATION_CLAMP       = 'clamp'
@@ -360,7 +366,13 @@ def get_atmosphere_property(altitude, atmosphere_dict):
     else :
       # 等温・拡散平衡を仮定した気圧式で外挿する。
       # 温度は等温領域なので端の値のまま。Kn は数密度に反比例するので逆に増える。
-      factor      = np.exp( -(altitude - altitude_atm[-1])/scale_height )
+      #
+      # 指数には上限を置く。上端から離れすぎると exp がアンダーフローして密度 0 に
+      # なり、Kn = 端の値/0 が Inf になって出力ファイルに Inf が並ぶ
+      # （0 除算の RuntimeWarning つき）。物理としては真空・完全な自由分子流の極限で、
+      # 空力係数もそこで飽和しているので、EXPONENT_MAXIMUM より遠くは同じ値で扱う。
+      exponent    = min( (altitude - altitude_atm[-1])/scale_height, EXPONENT_MAXIMUM )
+      factor      = np.exp( -exponent )
       density     = density_atm[-1]*factor
       temperature = temperature_atm[-1]
       knudsen     = knudsen_atm[-1]/factor

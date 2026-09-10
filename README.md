@@ -928,7 +928,11 @@ replacing the table changes it automatically. For the table shipped here the fit
 the mass at 400 km.
 
 The temperature is held at its value at the top of the table (the region is isothermal),
-and the Knudsen number is scaled inversely with the density.
+and the Knudsen number is scaled inversely with the density. The exponent is capped at 100
+scale heights: beyond that the exponential underflows to a density of exactly zero and the
+Knudsen number becomes `Inf`, which then reaches the output file. That far out the
+atmosphere is a vacuum and the free-molecular coefficients no longer change, so holding
+the values there costs nothing.
 
 Set `atmosphere.kind_extrapolation` to `clamp` to restore the earlier behaviour, in which
 the values were held at those of the top of the table. That overestimates the density by a

@@ -215,6 +215,34 @@ class TestExtrapolationAboveTheTable(unittest.TestCase):
         clamped = float(self._at(altitude, self.atm_clamp)[0])
         self.assertGreater(clamped / extrapolated, 10.0)
 
+    def test_the_exponent_is_capped_so_that_the_knudsen_number_stays_finite(self):
+        """
+        上端から遠く離れても Kn が Inf にならないこと。
+
+        指数に上限を置かないと exp がアンダーフローして密度が 0 になり、
+        Kn = 端の値/0 が Inf になる。発散した計算の出力に Inf が並び、
+        0 除算の RuntimeWarning も出ていた（レビュー A-10）。
+        """
+        height = self.atm[atmosphere.KEY_Height]
+        scale_height = self.atm[atmosphere.KEY_SCALE_HEIGHT]
+
+        for delta in (scale_height*atmosphere.EXPONENT_MAXIMUM,
+                      1.0e5, 1.0e7, 6.6e9):
+            density, temperature, knudsen = self._at(height[-1] + delta, self.atm)
+            self.assertTrue(np.isfinite(float(density)))
+            self.assertTrue(np.isfinite(float(knudsen)))
+            self.assertGreater(float(knudsen), 0.0)
+
+    def test_the_cap_does_not_touch_the_extrapolation_in_range(self):
+        """上限より内側では従来どおり exp(-dh/H) のままであること。"""
+        height = self.atm[atmosphere.KEY_Height]
+        scale_height = self.atm[atmosphere.KEY_SCALE_HEIGHT]
+        density_top = self.atm[atmosphere.KEY_Mass_density][-1]
+
+        delta = scale_height*(atmosphere.EXPONENT_MAXIMUM - 1.0)
+        density = float(self._at(height[-1] + delta, self.atm)[0])
+        self.assertAlmostEqual(density/(density_top*np.exp(-delta/scale_height)), 1.0, places=9)
+
     def test_unknown_mode_is_rejected(self):
         config = load_config()
         config['atmosphere']['kind_extrapolation'] = 'bogus'
