@@ -36,6 +36,13 @@ from orbital.orbital import orbital
 CONFIG_6DOF = os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_6dof', 'config.yml')
 CONFIG_REENTRY = os.path.join(ROOT_DIR, 'tutorial', 'work_reentry', 'config.yml')
 
+# 風を意図して有効にしている config。風のチュートリアル（モンテカルロとその
+# テンプレート、実データのテーブルを読むケース）だけで、いずれも参照出力を
+# 持たない（回帰テストの対象外）
+CONFIG_WIND_ON = [os.path.join(ROOT_DIR, 'tutorial', 'work_montecarlo_wind', 'config.yml'),
+                  os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_wind_table', 'config.yml'),
+                  os.path.join(ROOT_DIR, 'tutorial_template_wind', 'config.yml')]
+
 
 def read_tecplot(path):
     """Tecplot の point 形式を列名と数値配列にして返す。"""
@@ -175,16 +182,40 @@ class TestTheWindIsOffByDefault(unittest.TestCase):
         self.assertIsNone(wind.initial_settings_wind(config))
 
     def test_the_shipped_configs_leave_it_off(self):
-        # 参照出力を壊さないための条件。ここが True になった時点で回帰テストが落ちる
+        # 参照出力を壊さないための条件。ここが True になった時点で回帰テストが落ちる。
+        # 風のモンテカルロのチュートリアル（CONFIG_WIND_ON）だけは意図して有効で、
+        # そちらは参照出力を持たない
         paths = sorted(glob.glob(os.path.join(ROOT_DIR, 'tutorial', '*', 'config.yml')))
         paths.append(os.path.join(ROOT_DIR, 'tutorial_template', 'config.yml'))
         paths.append(os.path.join(ROOT_DIR, 'src', 'config.yml'))
+        paths = [path for path in paths if path not in CONFIG_WIND_ON]
         self.assertTrue(len(paths) >= 6)
         for path in paths:
             config = load_config(path)
             self.assertIn('wind', config, path)
             self.assertFalse(config['wind']['flag_wind'], path)
             self.assertIsNone(wind.initial_settings_wind(config), path)
+
+    def test_only_the_wind_tutorials_turn_it_on(self):
+        # 逆向きの検査。除外リストが実在の config を指していること、そこでは
+        # 風が実際に組み立てられることを見る（config を消して除外だけが残ると気付けない）
+        for path in CONFIG_WIND_ON:
+            self.assertTrue(os.path.exists(path), path)
+            config = load_config(path)
+            self.assertTrue(config['wind']['flag_wind'], path)
+            with quiet():
+                wind_dict = wind.initial_settings_wind(config)
+            self.assertIsNotNone(wind_dict, path)
+
+            if config['wind']['kind_wind_model'] == wind.MODEL_CONSTANT:
+                # ばらつかせる基準値になるので、水平成分がゼロでないこと
+                self.assertGreater(abs(config['wind']['velocity'][0])
+                                   + abs(config['wind']['velocity'][1]), 0.0, path)
+            else:
+                # テーブルを読むケース。同梱のテーブルが実在し、格子が組み上がること
+                self.assertEqual(config['wind']['kind_wind_model'], wind.MODEL_FILEREAD, path)
+                self.assertIn(wind.KEY_INTERP, wind_dict, path)
+                self.assertGreater(len(wind_dict[wind.KEY_ALTITUDE]), 1, path)
 
     def test_the_relative_velocity_is_the_velocity_itself_when_off(self):
         # 引き算を通さないので、風を切ったときの結果はビット単位で従来と同じになる
@@ -256,6 +287,115 @@ class TestTheFrameOfTheWind(unittest.TestCase):
         wind_dict = make_wind([11.0, -5.0, 3.0])
         for geodetic in ([0.0, 0.0, 0.0], [1.0, -0.5, 1.e5], [3.0, 1.2, 4.e5]):
             np.testing.assert_array_equal(wind.get_wind_local(geodetic, wind_dict), [11.0, -5.0, 3.0])
+
+
+class TestTheVelocityFactor(unittest.TestCase):
+    """
+    wind.velocity_factor は風の場に一様に掛かる係数（既定 1.0）。
+
+    これはテーブルの風をモンテカルロで振るための入口である。driver は制御ファイルの
+    **数値**を書き換える仕組みで、テーブルはファイル名で選ぶので、テーブルそのものは
+    振れない。initial_settings.density_factor と同じ流儀（1 要素のリスト）で書く。
+
+    既定の 1.0 では厳密に恒等（IEEE 754）なので、係数を書かない config と
+    ビット単位で同じ結果になる。ここはその 2 点を押さえる。
+    """
+
+    def setUp(self):
+        self.config = load_config()
+        self.coordinate = np.array([2.1e6, -3.4e6, 4.9e6])
+        self.directories = []
+
+    def tearDown(self):
+        import shutil
+
+        for directory in self.directories:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def build_wind(self, velocity, factor=None):
+        config = wind_config({}, velocity)
+        if factor is not None:
+            config['wind'][wind.KEY_FACTOR] = factor
+        with quiet():
+            return wind.initial_settings_wind(config)
+
+    def build_table(self, rows, factor=None):
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        self.directories.append(directory)
+        write_wind_table(os.path.join(directory, 'windmodel.txt'), rows)
+        config = table_config(directory, 'windmodel.txt')
+        if factor is not None:
+            config['wind'][wind.KEY_FACTOR] = factor
+        with quiet():
+            return wind.initial_settings_wind(config)
+
+    def test_the_default_is_one(self):
+        wind_dict = self.build_wind([20.0, 10.0, 0.0])
+        self.assertEqual(wind_dict[wind.KEY_FACTOR], 1.0)
+        # 掛け算を通しても値は 1 ビットも動かない
+        np.testing.assert_array_equal(wind.get_wind_local([0.1, 0.2, 1.e4], wind_dict),
+                                      [20.0, 10.0, 0.0])
+
+    def test_it_scales_the_constant_wind(self):
+        wind_dict = self.build_wind([20.0, 10.0, -4.0], [0.5])
+        np.testing.assert_allclose(wind.get_wind_local([0.1, 0.2, 1.e4], wind_dict),
+                                   [10.0, 5.0, -2.0], rtol=0.0, atol=0.0)
+
+    def test_a_bare_number_is_accepted_as_well(self):
+        # config には 1 要素のリストで書くが、スカラーで与えても同じに読む
+        wind_dict = self.build_wind([20.0, 10.0, 0.0], 2.0)
+        np.testing.assert_allclose(wind.get_wind_local([0.0, 0.0, 0.0], wind_dict),
+                                   [40.0, 20.0, 0.0], rtol=0.0, atol=0.0)
+
+    def test_it_scales_the_table(self):
+        rows = grid_rows([-10.0, 10.0], [0.0, 20.0], [0.0, 20.0],
+                         lambda lon, lat, alt: [lon + alt, lat - alt, 1.0])
+        wind_plain = self.build_table(rows)
+        wind_scaled = self.build_table(rows, [3.0])
+        for point in ([-10.0, 0.0, 0.0], [0.0, 10.0, 10.0], [5.0, 20.0, 20.0]):
+            np.testing.assert_allclose(local(wind_scaled, *point),
+                                       3.0*np.array(local(wind_plain, *point)), rtol=1.e-12)
+
+    def test_it_scales_the_wind_and_nothing_else(self):
+        # 係数 f の風 w は、係数なしの風 f*w と同じ。対気速度まで通して見る
+        velocity = np.array([1200.0, 3400.0, -560.0])
+        wind_scaled = self.build_wind([20.0, -10.0, 1.0], [0.25])
+        wind_plain = self.build_wind([5.0, -2.5, 0.25])
+        np.testing.assert_allclose(
+            wind.get_relative_velocity(self.config, self.coordinate, [0.0, 0.0, 0.0],
+                                       velocity, wind_scaled),
+            wind.get_relative_velocity(self.config, self.coordinate, [0.0, 0.0, 0.0],
+                                       velocity, wind_plain), rtol=0.0, atol=0.0)
+
+    def test_zero_brings_back_the_co_rotating_atmosphere(self):
+        # 係数 0 は「風なし」。対気速度が ECEF 速度に戻る
+        velocity = np.array([1200.0, 3400.0, -560.0])
+        wind_dict = self.build_wind([60.0, -30.0, 5.0], [0.0])
+        np.testing.assert_allclose(
+            wind.get_relative_velocity(self.config, self.coordinate, [0.0, 0.0, 0.0],
+                                       velocity, wind_dict), velocity, rtol=0.0, atol=0.0)
+
+    def test_a_factor_of_the_wrong_length_stops_the_run(self):
+        with self.assertRaises(SystemExit):
+            self.build_wind([20.0, 10.0, 0.0], [1.0, 2.0])
+
+    def test_a_factor_which_is_not_a_number_stops_the_run(self):
+        with self.assertRaises(SystemExit):
+            self.build_wind([20.0, 10.0, 0.0], ['strong'])
+
+    def test_the_shipped_configs_leave_it_at_one(self):
+        # 1.0 以外がまぎれ込むと、風を有効にしたケースの結果が黙って変わる
+        paths = sorted(glob.glob(os.path.join(ROOT_DIR, 'tutorial', '*', 'config.yml')))
+        paths.append(os.path.join(ROOT_DIR, 'tutorial_template', 'config.yml'))
+        paths.append(os.path.join(ROOT_DIR, 'tutorial_template_wind', 'config.yml'))
+        paths.append(os.path.join(ROOT_DIR, 'src', 'config.yml'))
+        self.assertTrue(len(paths) >= 7)
+        for path in paths:
+            config = load_config(path)
+            self.assertIn('wind', config, path)
+            self.assertEqual(wind.get_velocity_factor(config['wind']), 1.0, path)
 
 
 class TestTheRelativeVelocity(unittest.TestCase):

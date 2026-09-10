@@ -145,6 +145,14 @@ wind:
   # The horizontal directions are always clamped to the edge of the region.
   kind_extrapolation: zero
 
+  # Scale factor applied to the wind, whatever the model (1.0 = the wind as given)
+  # --Written as a one-element list because the Monte-Carlo routine perturbs it
+  #   element by element. This is how a wind TABLE is scattered: the driver
+  #   rewrites numbers in the control file, and a table is chosen by its file name.
+  # --1.0 leaves the result bit for bit as it is without this key.
+  velocity_factor:
+    - 1.0
+
 
 time_integration:
   # Time integration settings
@@ -244,8 +252,9 @@ montecarlo:
   # Control file
   filename_control: config.yml
   
-  # Result file name computed by Tacode
-  filename_trajectory: trajectory.dat
+  # Result file computed by Tacode, relative to the case directory
+  # --This is what the postprocess gathers into one file, one zone per case
+  filename_trajectory: output_result/tecplot.dat
 
   # Number of iteraction in Monte-Carlo routine
   number_iteration: 16
@@ -253,9 +262,8 @@ montecarlo:
   # Maximum number of execution in parallel
   maximum_number_execution: 8
 
-  # Result trajectory of Tacode 
+  # Gathered result of all the cases (one Tecplot file, one zone per case)
   result_dir: result_tacode
   flag_tecplot: True
-  header_tecplot: variables=Time[day],Longitude[deg],Latitude[deg],Altitude[km],Vel_long[m/s],Vel_lat[m/s],Vel_alt[m/s],Vel_mag[m/s],Density[kg/m3],Temperature[K],Kn,Time[sec]
   filename_tecplot: tecplot_taresult.dat
 

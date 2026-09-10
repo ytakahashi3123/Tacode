@@ -32,6 +32,9 @@
 #
 # テーブルは最大 4 次元（時刻 x 経度 x 緯度 x 高度）。**節点が 1 つの軸は落とす**ので、
 # 単一スナップショットの 3 次元場も、鉛直プロファイル 1 本も、同じ形式・同じ経路で扱える。
+#
+# wind.velocity_factor は風の場に一様に掛かる係数（既定 1.0）。モンテカルロで
+# テーブルの風を振るための入口で、initial_settings.density_factor と同じ流儀。
 
 import numpy as np
 import os as os
@@ -43,6 +46,7 @@ from general.general import get_setting
 # Dict key
 KEY_MODEL     = 'kind_wind_model'
 KEY_VELOCITY  = 'velocity'
+KEY_FACTOR    = 'velocity_factor'
 KEY_TIME      = 'Time'
 KEY_LONGITUDE = 'Longitude'
 KEY_LATITUDE  = 'Latitude'
@@ -126,7 +130,43 @@ def initial_settings_wind(config, epoch_dict=None):
     print('Program stopped.')
     exit()
 
+  wind_dict[KEY_FACTOR] = get_velocity_factor(section)
+  if wind_dict[KEY_FACTOR] != 1.0 :
+    print('--Wind velocity factor: {:g}'.format(wind_dict[KEY_FACTOR]))
+
   return wind_dict
+
+
+def get_velocity_factor(section):
+  #
+  # 風のスケール係数（既定 1.0）。風の場そのものに一様に掛かる。
+  #
+  # モンテカルロがテーブルの風を振るための入口である: driver は制御ファイルの
+  # **数値**を書き換える仕組みで、テーブルはファイル名で選ぶので、テーブルを
+  # 振るにはこういう数値が要る。initial_settings.density_factor とまったく
+  # 同じ流儀（1 要素のリスト）で書くのはそのため（driver がリストの要素ごとに
+  # 置換するので、スカラーのままでは振れない）。
+  #
+  # 既定の 1.0 では掛け算が恒等（IEEE 754 で 1.0*x は厳密に x）なので、
+  # 出力は 1 バイトも変わらない。
+  #
+  factor = get_setting(section, KEY_FACTOR, 1.0)
+
+  if isinstance(factor, (list, tuple, np.ndarray)) :
+    if len(factor) != 1 :
+      print('wind.velocity_factor must be a single value (a one-element list).')
+      print('Program stopped.')
+      exit()
+    factor = factor[0]
+
+  try:
+    factor = float(factor)
+  except (TypeError, ValueError):
+    print('wind.velocity_factor must be a number:', factor)
+    print('Program stopped.')
+    exit()
+
+  return factor
 
 
 def read_wind_file(config):
@@ -402,9 +442,13 @@ def get_wind_local(coordinate_geodetic, wind_dict, time_elapsed=0.0):
   # time_elapsed: 計算開始からの経過時間（s）。時刻軸を持つテーブルだけが使う。
   #
   if wind_dict[KEY_MODEL] == MODEL_CONSTANT :
-    return wind_dict[KEY_VELOCITY]
+    wind_local = wind_dict[KEY_VELOCITY]
+  else :
+    wind_local = get_wind_table(coordinate_geodetic, wind_dict, time_elapsed)
 
-  return get_wind_table(coordinate_geodetic, wind_dict, time_elapsed)
+  # スケール係数（wind.velocity_factor）。既定の 1.0 では厳密に恒等なので、
+  # 掛けても結果は 1 ビットも動かない
+  return get_setting(wind_dict, KEY_FACTOR, 1.0)*wind_local
 
 
 def is_outside(value, axis):

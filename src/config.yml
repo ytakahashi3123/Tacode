@@ -190,6 +190,14 @@ wind:
   # The horizontal directions are always clamped to the edge of the region.
   kind_extrapolation: zero
 
+  # Scale factor applied to the wind, whatever the model (1.0 = the wind as given)
+  # --Written as a one-element list because the Monte-Carlo routine perturbs it
+  #   element by element. This is how a wind TABLE is scattered: the driver
+  #   rewrites numbers in the control file, and a table is chosen by its file name.
+  # --1.0 leaves the result bit for bit as it is without this key.
+  velocity_factor:
+    - 1.0
+
 
 time_integration:
   # Time integration settings
@@ -301,13 +309,17 @@ montecarlo:
   maximum_number_execution: 8
 
   # Target variables to be changed in the Monte Carlo routine
-  # --[variable name, root name, dispersion]; the value is replaced by
+  # --[variable name, section name, dispersion]; the value is replaced by
   #   value*(1 + (rand-0.5)*dispersion), element by element, so the target
-  #   must be a list (coordinate, velocity, density_factor).
-  # --The rewriting is textual: it looks for the FIRST line of the copied
-  #   control file that contains the variable name, and replaces the lines
-  #   that follow. Do not write the variable name in a comment placed above
-  #   its own key in the template control file.
+  #   must be a list (coordinate, velocity, density_factor, velocity_factor).
+  # --The nominal values are read from THIS file and the matching lines of the
+  #   copied control file are rewritten, so keep the two in step.
+  # --The scatter is relative: an element whose nominal value is 0.0 stays 0.0.
+  # --The rewriting is textual: within the section, it looks for the key and
+  #   rewrites the list lines that follow it. The section name is what tells
+  #   wind.velocity apart from initial_settings.velocity.
+  # --A wind TABLE cannot be scattered this way (it is chosen by its file name);
+  #   scatter wind.velocity_factor instead.
   target_variable:
     - 
       - density_factor # Variable name
@@ -326,13 +338,18 @@ montecarlo:
   # --Name of the control file inside the template, rewritten per case
   filename_control: config.yml
   
-  # Result file name computed by Tacode
-  filename_trajectory: trajectory.dat
+  # Result file computed by Tacode, relative to the case directory
+  # --This is what the postprocess gathers, so it is the Tecplot output of the run
+  #   (post_process.directory_output + post_process.tecplot.filename_output).
+  filename_trajectory: output_result/tecplot.dat
   
-  # Result trajectory of Tacode 
-  # NOTE: read only by the unfinished postprocess routine (disabled in
-  #       montecarlo.py); no aggregated result file is produced yet.
-  #result_dir: result_tacode
-  #flag_tecplot: True
-  #header_tecplot: variables=Time[day],Longitude[deg],Latitude[deg],Altitude[km],Vel_long[m/s],Vel_lat[m/s],Vel_alt[m/s],Vel_mag[m/s],Density[kg/m3],Temperature[K],Kn,Time[sec]
-  #filename_tecplot: tecplot_taresult.dat
+  # Gathered result of all the cases
+  # --Once every case has run, the postprocess writes the Tecplot outputs of the
+  #   cases into one file, one zone per case, under result_dir. The variables line
+  #   is carried over from the cases themselves, so the columns follow whatever the
+  #   run wrote (the wind and the attitude add columns).
+  # --Statistics of the impact points are not computed here; that is what
+  #   src_helper/montecarlo_dispersion/ does.
+  result_dir: result_tacode
+  flag_tecplot: True
+  filename_tecplot: tecplot_taresult.dat
