@@ -13,6 +13,7 @@ import moment_term.moment_term as moment_term
 import satellite.satellite as satellite
 import wind.wind as wind
 from orbital.orbital import orbital
+from general.general import get_setting
 
 # Constants
 one_sixth = 1.0/6.0
@@ -135,6 +136,10 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
   # 経過時間は累積加算せず初期値からのオフセットで求めるため、開始点を保存する
   time_elapsed_initial = time_elapsed
   iteration_initial    = iteration
+
+  # 発散を検知する上限（既定で有効。健全な計算では一度も引っかからない）
+  flag_check_divergence, radius_maximum, velocity_maximum \
+    = set_divergence_limit(config, coordinate_cart[iteration])
 
   # 条件を <= にすると time_elapsed == time_elapsed_maximum でも回り、1 ステップ余分に進む
   while time_elapsed < config['computational_setup']['time_elapsed_maximum'] :
@@ -347,6 +352,13 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
     #print("Time elapsed:", time_elapsed, 'Longitude:', coord_geodetic_display[0], 'Latitude:', coord_geodetic_display[1], 'Altitude:', coord_geodetic_display[2], 'Velocity (Mag.)',veloc_polar_mag )
     print('{:.1f}'.format(time_elapsed)+', '+'{:.3f}'.format(coord_geodetic_display[0])+', '+'{:.3f}'.format(coord_geodetic_display[1])+', '+'{:.3f}'.format(coord_geodetic_display[2])+', '+'{:.3f}'.format(veloc_polar_mag) )
 
+    if flag_check_divergence :
+      # 高度が負になること以外の打ち切り条件が無いので、発散した状態はそのまま
+      # 出力に書かれていた。数値が並んでいるので一見それらしく、後処理も読む
+      check_divergence(coord_tmp, veloc_tmp, radius_maximum, velocity_maximum, time_elapsed,
+                       quat_tmp if flag_attitude else None,
+                       omega_tmp if flag_attitude else None)
+
     if coord_geodetic_display[2] <= 0.0 :
       break
 
@@ -492,6 +504,71 @@ def solve_rungekutta_attitude(m, dt, quaternion_rate, omega_rate, quat_tmp, omeg
     quat_tmp = attitude.quaternion_normalize(quat_tmp)
 
   return quat_tmp, omega_tmp, q_virtual, w_virtual
+
+
+def set_divergence_limit(config, coordinate_initial):
+  #
+  # 発散を検知する上限を初期状態から作る。
+  #
+  # computational_setup:
+  #   flag_check_divergence   : 検査そのもののon/off（既定True）
+  #   factor_radius_maximum   : 地心距離の上限。初期の地心距離の何倍か（既定10倍）
+  #   factor_velocity_maximum : 速度の上限。初期位置での脱出速度の何倍か（既定10倍）
+  #
+  # 初期状態を基準にするのは、上限を絶対値で決めると軌道の高さによって
+  # 意味が変わってしまうため。既定の10倍は、まともな計算では届かない一方で
+  # 発散した計算はすぐに超える（実測では地心距離 6.6e9 m、速度 1.4e6 m/s）。
+  #
+  section = config['computational_setup']
+
+  flag_check      = bool( get_setting(section, 'flag_check_divergence', True) )
+  factor_radius   = float( get_setting(section, 'factor_radius_maximum', 10.0) )
+  factor_velocity = float( get_setting(section, 'factor_velocity_maximum', 10.0) )
+
+  radius_initial = np.linalg.norm(coordinate_initial)
+
+  # 初期位置での脱出速度 sqrt(2 GM/r)
+  parameter_gravitational = config['planet']['gravitational_constant']*config['planet']['mass']
+  velocity_escape         = np.sqrt( 2.0*parameter_gravitational/radius_initial )
+
+  return flag_check, factor_radius*radius_initial, factor_velocity*velocity_escape
+
+
+def check_divergence(coordinate, velocity, radius_maximum, velocity_maximum, time_elapsed,
+                     quaternion=None, angular_velocity=None):
+  #
+  # 状態が非物理になっていないかを1ステップに1度だけ確かめ、駄目なら止める。
+  #
+  # 止めるのが要点である。発散した計算でも出力ファイル（Tecplot・restart・KML）は
+  # 最後まで書かれ、終了コードは0だったので、粗すぎる時間刻みの結果が
+  # 「計算できた」ものとして残ってしまう。
+  #
+  state = np.concatenate( (np.asarray(coordinate).ravel(), np.asarray(velocity).ravel()) )
+  if quaternion is not None :
+    state = np.concatenate( (state, np.asarray(quaternion).ravel(), np.asarray(angular_velocity).ravel()) )
+
+  message = None
+  if not np.all( np.isfinite(state) ) :
+    message = 'the state is not a finite number (NaN or Inf)'
+  else :
+    radius = np.linalg.norm(coordinate)
+    if radius > radius_maximum :
+      message = 'the geocentric distance {:.6g} m is beyond the limit {:.6g} m'.format(radius, radius_maximum)
+    else :
+      velocity_magnitude = np.linalg.norm(velocity)
+      if velocity_magnitude > velocity_maximum :
+        message = 'the velocity {:.6g} m/s is beyond the limit {:.6g} m/s'.format(velocity_magnitude, velocity_maximum)
+
+  if message is None :
+    return
+
+  print('The solution has diverged at {:.3f} s: {:s}.'.format(time_elapsed, message))
+  print('--A time step which is too coarse for the orbit is the usual cause;')
+  print('--halve time_integration.timestep_constant and run it again.')
+  print('--computational_setup.factor_radius_maximum / factor_velocity_maximum move the limits,')
+  print('--and flag_check_divergence: False switches the check off.')
+  print('Program stopped.')
+  sys.exit(1)
 
 
 def check_timestep_attitude(delta_time, attitude_property, aerodynamic_dict, kind_aerodynamic_model,

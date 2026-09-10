@@ -34,6 +34,21 @@ computational_setup:
   # steps is time_elapsed_maximum / timestep_constant.
   time_elapsed_maximum: 5000.0
 
+  # Sanity check on the state, so that a diverged run stops instead of being written out
+  # --The only other end of the run is the altitude going below zero, so a time step
+  #   which is too coarse used to write a geocentric distance of 6.6e9 m and a velocity
+  #   of 1.4e6 m/s into the output files and return the exit code 0.
+  # --The state is checked once a step: it must be a finite number, the geocentric
+  #   distance must stay below factor_radius_maximum times its initial value, and the
+  #   velocity below factor_velocity_maximum times the escape velocity at the initial
+  #   position. The limits are relative to the initial state because an absolute one
+  #   would mean something different for every orbit.
+  # --A sound run never comes near them; set flag_check_divergence: False to switch the
+  #   check off, for instance for a deliberately hyperbolic trajectory.
+  flag_check_divergence: True
+  factor_radius_maximum: 10.0
+  factor_velocity_maximum: 10.0
+
 
 satellite: 
   # Mass, kg

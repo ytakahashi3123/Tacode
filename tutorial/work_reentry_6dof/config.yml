@@ -9,6 +9,14 @@ computational_setup:
   #   stops at 1000 s (about 121 km). See the note on the timestep below.
   time_elapsed_maximum: 1000.0
 
+  # Sanity check on the state (a diverged run stops instead of being written out):
+  # a finite state, the geocentric distance within factor_radius_maximum times its
+  # initial value, and the velocity within factor_velocity_maximum times the escape
+  # velocity at the initial position
+  flag_check_divergence: True
+  factor_radius_maximum: 10.0
+  factor_velocity_maximum: 10.0
+
 
 satellite: 
   # Mass, kg

@@ -783,6 +783,7 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | `test_timestep_attitude.py` | The timestep itself: the `T/20` criterion the solver warns at is the first one whose numerical damping disappears, the order of convergence survives the atmosphere table, the angle-of-attack table is only C0 and costs the fourth order, and the shipped `dt = 0.05 s` is converged |
 | `test_epoch.py` | The absolute time: an ISO 8601 epoch is read from the configuration in every form PyYAML can hand over, the derived day of year, universal time and Julian date are right across a leap year and a year boundary, the Julian date agrees with `astropy` where it is installed, and the epoch stays off in every configuration shipped with the code |
 | `test_error_exit.py` | The exit code of an error path: no module in `src/` calls the built-in `exit()`, which returns 0 and hides a failure from the shell, the Monte-Carlo driver and CI, and a mistyped wind model, a wind velocity of the wrong length and a malformed epoch each stop with the code 1, both in process and when the solver is run as a child process |
+| `test_divergence.py` | The sanity check on the state: the limits are built from the initial state (ten times the geocentric distance, ten times the escape velocity) and follow the configuration, a state which is not finite - position, velocity, quaternion or angular velocity - stops the run, so does a distance or a speed beyond the limit, a state just inside them does not, a coarse time step which used to write a diverged trajectory and return 0 now stops with the code 1, the same run goes through with the check off, and a sound run is untouched |
 | `test_wind.py` | The wind, including the time axis, the merge of a lower and an upper table and the absence of HWM14: the frame of the given components agrees with the one the initial velocity already uses, the identity that the aerodynamics under a wind `w` at velocity `v` equals the aerodynamics in calm air at `v - w`, that gravity and the rotation terms and the angular velocity do not see the wind, the downwind drift of a full re-entry and the terminal speed relative to the air, the columns written to `tecplot.dat`, and that the wind stays off, and `velocity_factor` stays at 1.0, in every configuration shipped with the code. `velocity_factor` scales the constant wind and the table alike, 0.0 brings back the co-rotating atmosphere, and a factor which is not a single number stops the run. For a table: the nodes are reproduced and the interpolation between them is linear, the row order does not matter, a one-node axis degenerates so that a vertical profile needs no separate path, longitudes are folded and a global table joins across the seam, the horizontal is clamped and the vertical follows `kind_extrapolation`, an incomplete or duplicated grid is rejected, a mismatched epoch is reported, and the shipped tables and the offline paths of the generator are read back. With a time axis: the nodes and the linear interpolation between them, the shift by the epoch of the run, the clamp outside the range, the refusal to guess when there is no epoch, and that each Runge-Kutta stage reads its own time — shown by one step over the whole window, where the effective wind of a ramp is half its end value. For the merge: the blend across the transition layer, the alignment of the horizontal nodes, and the refusal of tables on different axes. The paths that fetch NCEP and that call HWM14 are not exercised, since they need the network and a Fortran build |
 
 `test/smoke_tutorial.py` is separate from the suite above: it runs the tutorial
@@ -941,6 +942,38 @@ after nine.
 
 Extrapolation is a safety net, not a substitute for data: extending the table itself is
 better whenever the trajectory spends a long time above it.
+
+## A run which diverges
+
+Integration ends when the altitude goes below zero, or when `time_elapsed_maximum` is
+reached. Neither of those catches a time step which is too coarse for the orbit: the
+trajectory is then thrown outwards, and the numbers — a geocentric distance of 6.6e9 m, a
+velocity of 1.4e6 m/s — were written to `tecplot.dat`, `restart.dat` and `geodetic.kml`
+like any other result, with the exit code 0.
+
+The state is therefore checked once a step:
+
+- every component of the position, the velocity and, with the attitude solved, the
+  quaternion and the angular velocity is a finite number,
+- the geocentric distance is within `factor_radius_maximum` times its initial value
+  (10 by default),
+- the speed is within `factor_velocity_maximum` times the escape velocity at the initial
+  position (10 by default).
+
+Falling outside prints what happened and stops with a non-zero exit code, so nothing is
+written:
+
+```
+The solution has diverged at 400.000 s: the geocentric distance 2.66051e+08 m is beyond the limit 6.56667e+07 m.
+--A time step which is too coarse for the orbit is the usual cause;
+--halve time_integration.timestep_constant and run it again.
+```
+
+The limits are taken from the initial state rather than given as absolute numbers, since
+an absolute limit means something different for every orbit. A sound run never comes near
+them — the tutorial cases reproduce their reference output byte for byte with the check in
+place. `computational_setup.flag_check_divergence: False` switches it off, for a
+deliberately hyperbolic trajectory or when the limits themselves are in the way.
 
 ## Verification of the attitude computation
 
