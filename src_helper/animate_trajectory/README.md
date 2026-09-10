@@ -59,6 +59,33 @@ The window is split into four:
 A file from a three-degree-of-freedom run has no attitude columns; the script says so and
 draws the trajectory alone, without orienting the vehicle.
 
+### Settings file
+
+Everything below can be written in a settings file instead of being typed on the command
+line. The tools read **`config_helper.yml` in the current directory** by default, in the
+same way the solver reads `config.yml`, and take their own section of it:
+
+```yaml
+animate_trajectory:
+  filename: output_result/tecplot.dat
+  output: attitude.mp4
+  shape: capsule
+  frames: 150
+```
+
+```console
+cd tutorial/work_reentry_6dof
+python3 ../../src_helper/animate_trajectory/animate_trajectory.py
+```
+
+The keys are the long options without their dashes, with `-` written as `_`
+(`--altitude-max` becomes `altitude_max`), and an unknown key stops the run rather than
+being quietly ignored. The order of
+precedence is **command line > settings file > default**, so a one-off change is still
+made on the command line. `-file` points at another file, and `--save-config` writes the
+settings in effect back out (comments are not kept, so save a handwritten file under
+another name to compare).
+
 ### Options
 
 | Option | Meaning |
@@ -107,6 +134,8 @@ quantises to 256 colours. The 6-DOF tutorial at 80 frames and `--dpi 70` comes t
 | `.mp4` | 1.1 MB |
 | `.gif` | 4.6 MB |
 | `.html` | 16.1 MB |
+| `-file` | settings file to read (default `config_helper.yml` in the current directory) |
+| `--save-config` | write the settings in effect to that file (or to the path given) and exit |
 
 Write an `.mp4` if ffmpeg is available, or lower `--dpi` and `--frames` — a GIF runs about
 70 kB a frame at `--dpi 80`, so 150 frames come to roughly 10 MB. The tutorial cases do not

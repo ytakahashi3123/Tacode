@@ -36,9 +36,17 @@ if SRC_DIR not in sys.path :
 
 import attitude.attitude as attitude   # noqa: E402
 
+GENERAL_DIR = os.path.normpath(os.path.join(HELPER_DIR, '..', 'general'))
 sys.path.insert(0, HELPER_DIR)
+if GENERAL_DIR not in sys.path :
+  sys.path.insert(0, GENERAL_DIR)
+
 import tecplot_reader as tecplot_reader  # noqa: E402
 import vehicle_shape as vehicle_shape    # noqa: E402
+import helper_config as helper_config    # noqa: E402
+
+# 設定ファイル（config_helper.yml）の中でこのツールが読むセクション
+NAME_SECTION = 'animate_trajectory'
 
 # 地球の赤道半径 [km]（描画用。config.yml の planet.radius と同じ値）
 RADIUS_PLANET = 6378.137
@@ -63,7 +71,7 @@ MATRIX_NED_TO_ENU = np.array([[0.0, 1.0, 0.0],
 def argument():
   parser = argparse.ArgumentParser(
     description='Animate a Tacode trajectory, with the attitude if the file has it.')
-  parser.add_argument('filename', type=str,
+  parser.add_argument('filename', type=str, nargs='?', default=None,
                       help='Tecplot file written by Tacode (output_result/tecplot.dat)')
   parser.add_argument('-o', '--output', type=str, default='trajectory.gif',
                       help='output animation (.gif, .html, or .mp4 if ffmpeg is available)')
@@ -84,7 +92,9 @@ def argument():
                       help='size limit of the frames embedded in an .html output, MB')
   parser.add_argument('--snapshot', type=float, default=None,
                       help='write a single frame at this time (s) instead of an animation')
-  return parser.parse_args()
+  helper_config.add_argument(parser)
+
+  return helper_config.get_setting(parser, NAME_SECTION)
 
 
 def geodetic_range(position, margin_deg=8.0):
@@ -200,6 +210,11 @@ def matrix_ecef_to_enu(position):
 
 def main():
   args = argument()
+
+  if helper_config.save_file(args, NAME_SECTION) :
+    return
+
+  helper_config.require(args, 'filename', NAME_SECTION)
 
   data = tecplot_reader.read_tecplot(args.filename)
   flag_attitude = tecplot_reader.has_attitude(data)

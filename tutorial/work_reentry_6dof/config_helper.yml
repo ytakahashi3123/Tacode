@@ -1,0 +1,31 @@
+# Settings for the post-processing tools in src_helper/
+#
+# --Read from the current directory, so the tool can be run with no arguments:
+#     python3 ../../src_helper/animate_trajectory/animate_trajectory.py
+# --One section per tool; the keys are the long options without the dashes.
+#   An unknown key stops the run.
+# --The command line overrides what is written here, and -file points at another file.
+# --"--save-config" writes the settings in effect back out (without these comments).
+
+animate_trajectory:
+  # The Tecplot output of this case. It carries the attitude columns, so the vehicle
+  # is drawn turned as computed
+  filename: output_result/tecplot.dat
+
+  # The format follows the extension: .gif, .html (self-contained, no ffmpeg) or .mp4
+  output: attitude.mp4
+
+  shape: capsule    # capsule, satellite or aircraft; for the drawing only
+  frames: 150
+  fps: 20
+  dpi: 100
+
+  # Half width of the ground view in km; 0 shows the whole trajectory
+  window: 1800.0
+
+  # Size of the vehicle drawn on the ground view, km (exaggerated: it is 1 m across)
+  scale: 500.0
+
+  elevation: 22.0
+  # fixed_view: true    # do not let the camera follow the vehicle
+  # snapshot: 300.0     # write a single frame at this time instead of an animation
