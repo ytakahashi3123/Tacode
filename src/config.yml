@@ -106,6 +106,20 @@ planet:
     Lambda22: -14.545   # Degree
     
 
+epoch:
+  # Absolute time of the initial condition (UTC)
+  # --The solver itself needs only the elapsed time; the epoch is required by the
+  #   models that depend on the date: the wind (the NCEP time axis, the day of year
+  #   and the universal time HWM14 takes) and, later, the lunar and solar ephemeris.
+  # --False (default): no absolute time. The outputs are then exactly as before.
+  flag_epoch: False
+
+  # UTC in ISO 8601. Quote it so that it stays a string; an unquoted timestamp is
+  # accepted as well. A missing time zone is taken as UTC.
+  # --Leap seconds are not modelled; UTC is treated as a uniform time scale.
+  datetime: '2026-03-21T03:00:00Z'
+
+
 atmosphere:
   # Atmosphere model
   # --constant, or fileread
@@ -137,6 +151,46 @@ atmosphere:
   filename_atmosphere: atmospheremodel.txt
 
   
+wind:
+  # Wind
+  # --The aerodynamics is evaluated with the air-relative velocity
+  #     v_air = v_ecef - v_wind
+  #   which affects the drag, the 6-DOF force and moment, the dynamic pressure and
+  #   the angle of attack. Gravity, the Coriolis and the centrifugal terms keep using
+  #   the ECEF velocity, and the angular velocity is untouched: the wind translates
+  #   the air, it does not rotate it.
+  # --False (default): the atmosphere co-rotates with the Earth, exactly as before.
+  flag_wind: False
+
+  # Wind model
+  # --constant: one uniform wind everywhere
+  # --fileread: interpolate a table of longitude x latitude x altitude
+  kind_wind_model: constant
+
+  # Wind model: constant settings
+  # --[East, North, Up] in the local geocentric horizon, m/s. This is the frame the
+  #   initial velocity already uses, so the two are given the same way. It is
+  #   geocentric, not geodetic; see the note in README.md.
+  velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+
+  # Wind model: file input
+  # --Path resolution is the same as satellite.directory_path_specify
+  directory_path_specify: manual # default or manual
+  directory_wind: database/wind
+  filename_wind: windmodel.txt
+
+  # Treatment outside the altitude range of the table
+  # --zero (default): no wind there, that is, the atmosphere co-rotates with the Earth
+  #   as it does without this section. NCEP reaches only 31-48 km, so clamping its top
+  #   value upwards would stretch the stratospheric jet into the thermosphere.
+  # --clamp: use the value at the end of the table.
+  # The horizontal directions are always clamped to the edge of the region.
+  kind_extrapolation: zero
+
+
 time_integration:
   # Time integration settings
 

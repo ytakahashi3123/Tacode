@@ -25,23 +25,14 @@
 
 import numpy as np
 import sys as sys
+# config を既定値つきで読む共通関数。実体は general.py にある
+# （姿勢だけでなくエポック・風のセクションも同じ扱いにするため）。
+# 既存の呼び出し（attitude.get_setting）を壊さないよう、ここから再輸出する。
+from general.general import get_setting
 
 # Dict key
 KEY_QUATERNION       = 'quaternion'
 KEY_ANGULAR_VELOCITY = 'angular_velocity'
-
-
-def get_setting(section, key, default):
-  # config の姿勢まわりの項目はすべて省略可能にしてあるので、既定値を返せるようにする
-  if section is None :
-    return default
-  try:
-    value = section[key]
-  except (KeyError, TypeError):
-    return default
-  if value is None :
-    return default
-  return value
 
 
 def quaternion_normalize(quaternion):

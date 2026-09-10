@@ -49,7 +49,8 @@ def absolutize_database_path(config, case_directory):
     config の場所に読み替えないとリポジトリ直下の database/ を掴んでしまう。
     """
     for section, key in (('satellite', 'directory_aerodynamic'),
-                         ('atmosphere', 'directory_atmosphere')):
+                         ('atmosphere', 'directory_atmosphere'),
+                         ('wind', 'directory_wind')):
         block = config.get(section)
         if not block or block.get('directory_path_specify') != 'manual':
             continue

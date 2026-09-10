@@ -7,6 +7,21 @@ import sys as sys
 import numpy as np
 
 
+def get_setting(section, key, default):
+  # config の省略可能な項目を既定値つきで読む。
+  # 姿勢・エポック・風のセクションはいずれも省略可能にしてあるので、
+  # セクションごと無い場合も含めて既定値を返せるようにする。
+  if section is None :
+    return default
+  try:
+    value = section[key]
+  except (KeyError, TypeError):
+    return default
+  if value is None :
+    return default
+  return value
+
+
 class general:
 
   def __init__(self):

@@ -11,16 +11,21 @@ import coordinate_system.coordinate_system as coordinate_system
 import force_term.force_term as force_term
 import moment_term.moment_term as moment_term
 import satellite.satellite as satellite
+import wind.wind as wind
 from orbital.orbital import orbital
 
 # Constants
 one_sixth = 1.0/6.0
 fact_rk   = [0.5, 0.5, 1.0, 0.0]
 fact_up   = [1.0, 2.0, 2.0, 1.0]
+# 各段が評価する時刻（現在時刻からの dt 倍）。fact_rk が段の終わりに次の仮想状態を
+# 作る係数なので、段 m が見ているのは t + fact_time_rk[m]*dt。
+# 力が時刻に依らなかったこれまでは要らなかったが、風は時刻に依る
+fact_time_rk = [0.0, 0.5, 0.5, 1.0]
 
 
 
-def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, atmosphere_dict, aerodynamic_dict, attitude_dict=None):
+def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, atmosphere_dict, aerodynamic_dict, attitude_dict=None, wind_dict=None):
   
   print( 'Start calculation of equation of motion...' )
 
@@ -68,6 +73,12 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
 
   # Force setting
   force = force_term.force_initialsettings(config)
+
+  # Wind setting
+  # --wind_dict が None なら大気は地球と共回転し、ECEF 速度がそのまま対気速度になる（従来の仮定）
+  flag_wind = wind_dict is not None
+  if flag_wind :
+    print('--Taking the wind into account (the aerodynamics uses the air-relative velocity)')
 
   # Attitude (6-DOF) setting
   # --attitude_dict が None なら従来どおりの質点 3 自由度計算
@@ -153,6 +164,12 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
       if kind_aerodynamic_model == 'fileread' :
         cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic, interpolator_aerodynamic)
 
+      # 対気速度。風が無効なら None のままで、以後は従来どおり ECEF 速度が使われる
+      velocity_air = None
+      if flag_wind :
+        velocity_air = wind.get_relative_velocity(config, coord_tmp, coord_geod, veloc_tmp, wind_dict,
+                                                  time_elapsed)
+
       # 出力用の大気量
       # --オイラー陽解法では現在位置での評価値がそのまま現在位置に対応する
       density_output     = density
@@ -166,14 +183,14 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
                                   coord_tmp, veloc_tmp, quat_tmp, omega_tmp, \
                                   mass_satellite, area_satellite, length_satellite, \
                                   density, density_factor, knudsen, cdmean, stability_derivative, \
-                                  rotation_rate_planet, moment)
+                                  rotation_rate_planet, moment, velocity_air)
       else :
         force_aerodynamic = None
 
       # Calculate force
       force = force_term.force_routine(config, coord_tmp, veloc_tmp,   \
                                        mass_satellite, area_satellite, \
-                                       cdmean, density_factor, density, force, force_aerodynamic)
+                                       cdmean, density_factor, density, force, force_aerodynamic, velocity_air)
       #"density factor" added by Tomoki Sakai 2023/2/3
       force_total = force[0,:]
  
@@ -219,6 +236,13 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
         if kind_aerodynamic_model == 'fileread' :
           cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic, interpolator_aerodynamic)
 
+        # 対気速度。各段の仮想位置で引く（大気量と同じ場所）。
+        # 風が無効なら None のままで、以後は従来どおり ECEF 速度が使われる
+        velocity_air = None
+        if flag_wind :
+          velocity_air = wind.get_relative_velocity(config, r_virtual, coord_geod, v_virtual, wind_dict,
+                                                    time_elapsed + fact_time_rk[m]*delta_time)
+
         # 出力用の大気量
         # --1 段目は現在位置 r_n での評価値なので、これを出力に使う。
         # --4 段目の値は r_{n+1} 近傍での評価値であり、r_n の行に並べると 1 ステップずれる。
@@ -243,14 +267,14 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
                                     r_virtual, v_virtual, q_virtual, w_virtual, \
                                     mass_satellite, area_satellite, length_satellite, \
                                     density, density_factor, knudsen, cdmean, stability_derivative, \
-                                    rotation_rate_planet, moment)
+                                    rotation_rate_planet, moment, velocity_air)
         else :
           force_aerodynamic = None
 
         # Calculate force
         force = force_term.force_routine(config, r_virtual, v_virtual, \
                                          mass_satellite, area_satellite, \
-                                         cdmean, density_factor, density, force, force_aerodynamic)
+                                         cdmean, density_factor, density, force, force_aerodynamic, velocity_air)
         #"density factor" added by Tomoki Sakai 2023/2/3
         force_total = force[0,:]
  
@@ -306,9 +330,12 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
 
       # 姿勢振動の周期に対して時間刻みが粗いと発散するので、最初に条件を割ったところで警告する
       if not flag_warned_timestep :
+        # 動圧は対気速度で作る（風があると振動周期の見積もりが変わる）
+        veloc_aero_tmp = wind.get_relative_velocity(config, coord_tmp, coord_geodetic, veloc_tmp, wind_dict,
+                                                    time_elapsed + delta_time)
         flag_warned_timestep = check_timestep_attitude(delta_time, attitude_property, aerodynamic_dict, \
                                                        kind_aerodynamic_model, stability_derivative, \
-                                                       density_factor*density, np.linalg.norm(veloc_tmp), \
+                                                       density_factor*density, np.linalg.norm(veloc_aero_tmp), \
                                                        knudsen, area_satellite, length_satellite)
 
     iteration    = iteration + 1
@@ -392,7 +419,7 @@ def get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aero
                           coordinate, velocity, quaternion, omega_inertial,
                           mass_satellite, area_satellite, length_satellite,
                           density, density_factor, knudsen, cdmean, stability_derivative,
-                          rotation_rate_planet, moment):
+                          rotation_rate_planet, moment, velocity_air=None):
   #
   # 姿勢に依存する空力（力・モーメント）を求める。
   #
@@ -401,13 +428,15 @@ def get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aero
   #   moment_total     : 重心まわりのモーメントの合計（機体軸成分, N m）
   #   omega_relative   : ECEF に対する角速度（機体軸成分, rad/s）
   #
-  # ECEF 速度をそのまま対気速度として使う（大気は地球と共回転しているという
-  # 3 自由度計算と同じ仮定）。
+  # 対気速度は velocity_air で与える。None なら ECEF 速度をそのまま使う
+  # （大気は地球と共回転しているという、風を入れないときの従来の仮定）。
+  # 角速度（omega_relative）は風では変わらない。風は並進の量だから。
   #
   quaternion = attitude.quaternion_normalize(quaternion)
   matrix_be  = attitude.quaternion_to_matrix(quaternion)
 
-  velocity_body = np.dot(matrix_be, np.array(velocity))
+  velocity_aero = velocity if velocity_air is None else velocity_air
+  velocity_body = np.dot(matrix_be, np.array(velocity_aero))
   velocity_mag  = np.linalg.norm(velocity_body)
 
   alpha, beta, alpha_total, phi_aero = attitude.get_aerodynamic_angle(velocity_body)

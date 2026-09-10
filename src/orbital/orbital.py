@@ -6,6 +6,8 @@ import sys as sys
 from general.general import general
 import attitude.attitude as attitude
 import coordinate_system.coordinate_system as coordinate_system
+import epoch.epoch as epoch_module
+import wind.wind as wind_module
 
 class orbital(general):
 
@@ -194,7 +196,7 @@ class orbital(general):
     return attitude_dict
 
 
-  def output_restart(self, config, iteration, time_elapsed, coordinate, velocity, attitude_dict=None):
+  def output_restart(self, config, iteration, time_elapsed, coordinate, velocity, attitude_dict=None, epoch_dict=None):
 
     dir_restart      = config['restart_process']['directory_output']
     file_restart     = config['restart_process']['file_restart']
@@ -223,6 +225,9 @@ class orbital(general):
     # File open  
     file = open(filename_tmp, "w")
     file.write('# Restart data (ECEF, cartesian system)' + self.newline_code)
+    # エポックを与えたときだけ、経過秒がどの UTC を起点にしているかを添える
+    if epoch_dict is not None :
+      file.write('# Epoch (UTC): ' + epoch_module.get_string(epoch_dict, 0.0) + self.newline_code)
     if flag_attitude :
       file.write('# X, Y, Z, U, V, W, q0, q1, q2, q3, P, Q, R' + self.newline_code)
       file.write('# --Quaternion: ECEF to body. Angular velocity: body axes, relative to the inertial frame' + self.newline_code)
@@ -283,7 +288,7 @@ class orbital(general):
     return iteration, time_elapsed, coordinate, velocity
 
 
-  def get_attitude_output(self, config, coordinate_cartesian, velocity_cartesian, quaternion, omega_inertial, rotation_rate_planet):
+  def get_attitude_output(self, config, coordinate_cartesian, velocity_cartesian, quaternion, omega_inertial, rotation_rate_planet, velocity_air=None):
     #
     # Tecplot に書き出す姿勢まわりの量を組み立てる。
     #  クォータニオン（ECEF -> 機体）、ローカル水平基準のオイラー角、
@@ -299,7 +304,9 @@ class orbital(general):
 
     matrix_be      = attitude.quaternion_to_matrix(quaternion)
     omega_relative = attitude.get_omega_relative(omega_inertial, rotation_rate_planet, matrix_be)
-    velocity_body  = np.dot(matrix_be, np.array(velocity_cartesian))
+    # 空力角はソルバーと同じ対気速度から作る。風が無ければ ECEF 速度そのもの
+    velocity_aero  = velocity_cartesian if velocity_air is None else velocity_air
+    velocity_body  = np.dot(matrix_be, np.array(velocity_aero))
 
     alpha, beta, alpha_total, phi_aero = attitude.get_aerodynamic_angle(velocity_body)
 
@@ -311,7 +318,7 @@ class orbital(general):
     return self.blank_code.join([str(value) for value in value_output])
 
 
-  def output_tecplot(self, config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict=None):
+  def output_tecplot(self, config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict=None, epoch_dict=None, wind_dict=None):
 
     if config['post_process']['tecplot']['flag_output'] :
 
@@ -325,6 +332,11 @@ class orbital(general):
       density_traj     = trajectory_dict['density']
       temperature_traj = trajectory_dict['temperature']
       knudsen_traj     = trajectory_dict['knudsen']
+
+      # Wind
+      # --風は位置（と、いずれ時刻）だけの関数なので保存しておらず、ここで引き直す。
+      #   オイラー角や迎角と同じ扱いで、配列長のずれが入り込む余地を無くすため
+      flag_wind = wind_dict is not None
 
       # Attitude (6-DOF)
       flag_attitude = attitude_dict is not None
@@ -342,7 +354,17 @@ class orbital(general):
       print('Writing Tecplot file... ', filename_tmp)
       file = open(filename_tmp, "w")
       file.write('# Tecplot data: Tacode' + self.newline_code)
+      # エポックを与えたときだけ、Time[s] の起点を添える。列は増やさない
+      # （Tecplot の point 形式に文字列の列を混ぜられないため。各行の UTC は
+      #   このエポックに Time[s] を足せば得られる）
+      if epoch_dict is not None :
+        file.write('# Epoch (UTC): ' + epoch_module.get_string(epoch_dict, 0.0) + self.newline_code)
+        file.write('# --UTC of each row is this epoch plus Time[s]' + self.newline_code)
       variables_tmp = 'Variables = Time[s],X[km],Y[km],Z[km],Long[deg.],Lati[deg.],Alti[km],Upl[m/s],Vpl[m/s],Wpl[m/s],VelplAbs[m/s],Dens[kg/m3],Temp[K],Kn'
+      # 風を入れたときだけ、風そのものと対気速度の大きさを添える。
+      # 対地速度（Upl/Vpl/Wpl）はそのまま残す。両方見えないと風の効きが読めないため
+      if flag_wind :
+        variables_tmp = variables_tmp + ',WindE[m/s],WindN[m/s],WindU[m/s],VelairAbs[m/s]'
       if flag_attitude :
         variables_tmp = variables_tmp + ',q0,q1,q2,q3,Yaw[deg.],Pitch[deg.],Roll[deg.],P[deg/s],Q[deg/s],R[deg/s],AoA[deg.],Sideslip[deg.],AoAtotal[deg.]'
       file.write(variables_tmp + self.newline_code)
@@ -366,11 +388,22 @@ class orbital(general):
           str_veloc_pola = str_veloc_pola + str(np.linalg.norm(velocity_pola[n])) + self.blank_code
           str_traj       = str(density_traj[n]) + self.blank_code + str(temperature_traj[n]) + self.blank_code + str(knudsen_traj[n]) 
           #
+          str_wind     = ''
+          velocity_air = None
+          if flag_wind :
+            wind_local   = wind_module.get_wind_local(coordinate_geod[n], wind_dict, time_tmp)
+            velocity_air = wind_module.get_relative_velocity(config, coordinate_cart[n], coordinate_geod[n],
+                                                             velocity_cart[n], wind_dict, time_tmp)
+            for m in range(0,3):
+              str_wind = str_wind + self.blank_code + str(wind_local[m])
+            str_wind = str_wind + self.blank_code + str(np.linalg.norm(velocity_air))
+          #
           str_attitude = ''
           if flag_attitude :
             str_attitude = self.blank_code + self.get_attitude_output(config, coordinate_cart[n], velocity_cart[n],
-                                                                      quaternion_list[n], omega_list[n], rotation_rate_planet)
-          file.write( str_time  + str_coord_cart + str_coord_geod + str_veloc_pola + str_traj + str_attitude + self.newline_code)
+                                                                      quaternion_list[n], omega_list[n], rotation_rate_planet,
+                                                                      velocity_air)
+          file.write( str_time  + str_coord_cart + str_coord_geod + str_veloc_pola + str_traj + str_wind + str_attitude + self.newline_code)
       file.close()
 
     return

@@ -563,6 +563,8 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | `test_attitude_verification.py` | Problems whose answer is known in closed form, solved by the production solver: the order of convergence, the Jacobi-elliptic solution of the torque-free asymmetric body, conservation of the angular momentum vector in inertial space, the precession of an axisymmetric body, the logarithmic decrement of a damped oscillation, the gravity-gradient libration frequency in a circular orbit, and the axisymmetry of the tabulated aerodynamics |
 | `test_regression_6dof.py` | The 6-DOF tutorial case, run for its full 1000 s, reproduces the `tecplot.dat`, `restart.dat` and `geodetic.kml` committed in `tutorial/work_reentry_6dof` |
 | `test_timestep_attitude.py` | The timestep itself: the `T/20` criterion the solver warns at is the first one whose numerical damping disappears, the order of convergence survives the atmosphere table, the angle-of-attack table is only C0 and costs the fourth order, and the shipped `dt = 0.05 s` is converged |
+| `test_epoch.py` | The absolute time: an ISO 8601 epoch is read from the configuration in every form PyYAML can hand over, the derived day of year, universal time and Julian date are right across a leap year and a year boundary, the Julian date agrees with `astropy` where it is installed, and the epoch stays off in every configuration shipped with the code |
+| `test_wind.py` | The wind, including the time axis, the merge of a lower and an upper table and the absence of HWM14: the frame of the given components agrees with the one the initial velocity already uses, the identity that the aerodynamics under a wind `w` at velocity `v` equals the aerodynamics in calm air at `v - w`, that gravity and the rotation terms and the angular velocity do not see the wind, the downwind drift of a full re-entry and the terminal speed relative to the air, the columns written to `tecplot.dat`, and that the wind stays off in every configuration shipped with the code. For a table: the nodes are reproduced and the interpolation between them is linear, the row order does not matter, a one-node axis degenerates so that a vertical profile needs no separate path, longitudes are folded and a global table joins across the seam, the horizontal is clamped and the vertical follows `kind_extrapolation`, an incomplete or duplicated grid is rejected, a mismatched epoch is reported, and the shipped tables and the offline paths of the generator are read back. With a time axis: the nodes and the linear interpolation between them, the shift by the epoch of the run, the clamp outside the range, the refusal to guess when there is no epoch, and that each Runge-Kutta stage reads its own time — shown by one step over the whole window, where the effective wind of a ramp is half its end value. For the merge: the blend across the transition layer, the alignment of the horizontal nodes, and the refusal of tables on different axes. The paths that fetch NCEP and that call HWM14 are not exercised, since they need the network and a Fortran build |
 
 `test/smoke_tutorial.py` is separate from the suite above: it runs the tutorial
 case end to end in a temporary directory and inspects the three output files, then
@@ -601,6 +603,7 @@ Optional:
 |---|---|---|
 | gpxpy | >= 1.3.5 | GPX output only, which is disabled in `output_routine()` |
 | matplotlib | >= 3.3 | The post-processing tools in `src_helper/`. The solver never imports it |
+| astropy | >= 5.0 | A reference for the Julian date in `test_epoch.py` only. That test is skipped when it is absent, and neither the solver nor the tools import it |
 
 `ffmpeg` is optional as well, and is a program rather than a Python package: the animation
 tool needs it on the PATH to write an `.mp4`, but not for a `.gif` or an `.html`.
@@ -785,6 +788,168 @@ angle.
 
 The angle of attack is measured against the ECEF velocity, that is, the atmosphere is
 assumed to co-rotate with the Earth. Winds are not modelled.
+
+## Wind
+
+Without a wind the atmosphere is taken to co-rotate with the Earth as a rigid body, so
+the ECEF velocity *is* the air-relative velocity. The `wind` section relaxes that: the
+aerodynamics is then evaluated at
+
+$$
+\boldsymbol{v}_\mathrm{air} = \boldsymbol{v}_\mathrm{ECEF} - \boldsymbol{v}_\mathrm{wind}
+$$
+
+which changes the drag, the 6-DOF force and moment, the dynamic pressure, the angle of
+attack and the sideslip angle, and the pitch period the timestep is checked against.
+Gravity, the Coriolis and the centrifugal terms keep using the ECEF velocity, and the
+angular velocity is untouched: a wind translates the air, it does not rotate it.
+
+```yaml
+wind:
+  flag_wind: False
+  kind_wind_model: constant
+  velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+```
+
+`flag_wind: False` is the default and the shipped behaviour, and the outputs are then
+exactly what they were before the section existed. `constant` applies one uniform wind
+everywhere; `fileread` interpolates a table.
+
+The components are `[East, North, Up]` in the **local geocentric** horizon in m/s, which
+is the frame the initial velocity is already given in, converted through the same routine.
+It is geocentric rather than geodetic, so it is tilted from the true horizontal by up to
+0.19 deg, exactly as described under *Reference frame of the initial velocity* above; a
+horizontal wind of 60 m/s therefore picks up about 0.2 m/s of spurious vertical
+component. Meteorological `u` and `v` are defined in the geodetic horizon, so a table
+converted from such a source inherits that tilt. Keeping one convention for the initial
+velocity, the velocity output and the wind was preferred over mixing two.
+
+With the wind switched on, `tecplot.dat` gains `WindE[m/s]`, `WindN[m/s]`, `WindU[m/s]`
+and `VelairAbs[m/s]`. The ground-relative velocity `Upl/Vpl/Wpl` and its magnitude
+`VelplAbs[m/s]` stay as they are, so both speeds can be read off the same row. The wind
+is a function of the position alone, so it is not stored during the run and is looked up
+again when the output is written, in the same way as the Euler angles and the aerodynamic
+angles.
+
+### Wind tables
+
+`kind_wind_model: fileread` reads a table of longitude × latitude × altitude, with the
+path resolved exactly as the atmosphere and aerodynamic tables are:
+
+```yaml
+wind:
+  flag_wind: True
+  kind_wind_model: fileread
+  directory_path_specify: manual
+  directory_wind: database/wind
+  filename_wind: wind_ncep_20240101_pacific.txt
+  kind_extrapolation: zero
+```
+
+There is one file format regardless of dimensionality: comment lines, then one row per
+grid point holding longitude, latitude, altitude and the three components — or seven
+numbers, with the time in front, when the table carries a time axis. **A one-dimensional
+vertical profile is written as a field with one longitude node and one latitude node** —
+axes carrying a single node are dropped when the interpolator is built, so the profile
+becomes a function of altitude alone without a second code path, and a single snapshot is
+a table whose time axis has one node. The grid must be filled completely; a table whose
+rows do not add up to the product of its axes is rejected rather than padded, since a
+missing point and a calm point would otherwise look the same. Longitudes are folded into
+`[-180, 180)` so a table in the meteorological `0-360` convention reads correctly, and a
+table spanning the globe is detected and joined across the seam. The interpolator is built
+once at start-up and only evaluated during the run, as the atmosphere and aerodynamic
+interpolators are.
+
+Outside the altitude range of the table, `kind_extrapolation` decides: `zero` (the
+default) leaves the air co-rotating with the Earth, and `clamp` holds the value at the
+end. `zero` is the default because NCEP reaches only about 31 km while a re-entry begins
+far above it, and clamping would stretch the stratospheric wind into the thermosphere.
+The horizontal directions are always clamped to the edge of the region. Leaving the range
+of the table warns once, naming the range and the position.
+
+### Interpolation in time
+
+A table with a time axis carries its times in seconds from its own `# Epoch (UTC):` line,
+and the `epoch` section places the run on that axis: the wind at elapsed time `t` is read
+at `(epoch of the run - epoch of the table) + t`. The epoch is therefore not optional
+here, and a table with a time axis but no epoch — in the table or in the configuration —
+stops the run rather than guessing. Outside the range of the axis the nearest snapshot is
+used and the run warns once. For a single snapshot the elapsed time is not consulted at
+all, and a mismatch against the epoch is only reported.
+
+Each Runge-Kutta stage reads the wind at its own time, `t`, `t + dt/2`, `t + dt/2` and
+`t + dt`, since the force is now a function of time. It made no difference while every
+term was time-independent.
+
+### Where the tables come from
+
+`database/wind/generate_wind_table.py` prepares the tables. It fetches a region of
+NCEP/NCAR Reanalysis 1 — past observations, not a forecast — from NOAA PSL's OPeNDAP
+service, needing nothing beyond the standard library and numpy, since it reads the
+`.ascii` response rather than NetCDF; only the range asked for is transferred, and asking
+for a duration rather than an instant gives the table a time axis. The wind sits on
+pressure levels, so the altitudes come from the geopotential height of the same time and
+grid.
+
+Above about 31 km NCEP has nothing, and the model for the thermosphere is HWM14 (NRL),
+which reaches 500 km. HWM14 is Fortran plus the NRL coefficient files, so it is not a
+dependency: the script imports it only when asked for it, and otherwise says how to obtain
+and build it and stops. Its output is written in the same format, and `--source merge`
+joins a lower and an upper table across a transition layer, since the two models disagree
+by tens of m/s where they meet and switching at a single altitude would make the wind
+jump. Details, the sign convention and the shipped samples are in
+`database/wind/README.md`.
+
+### How much the wind matters
+
+The effect is not a small perturbation in the re-entry case. The vehicle of
+`tutorial/work_reentry` is light (`m/(C_D A)` of about 9.8 kg/m²) and reaches the ground
+at 13 m/s after spending some 1000 s below 32 km, where a wind of tens of m/s is
+comparable to its own speed. A uniform 20 m/s easterly moves the landing point by
+about 29 km.
+
+A real profile is not uniform, and its layers partly cancel. With
+`wind_ncep_20240101_pacific.txt` — the actual analysis for 2024-01-01 00 UTC over the
+region the vehicle comes down in, where the wind is easterly in the stratosphere and
+westerly near 10 km — the landing point moves 2.1 km, almost all of it northward.
+
+Adding the thermosphere changes that again. The vehicle spends 1552 s between 80 and
+150 km, where HWM14 gives winds of tens of m/s, and with
+`wind_merged_20240101_pacific.txt` covering 0 to 500 km the landing point moves 12.8 km
+(10.1 km west, 7.9 km north) rather than 2.1 km. Most of the displacement is picked up
+above the range NCEP alone can reach.
+
+## Epoch (absolute time)
+
+The solver marches an elapsed time that starts at zero; it needs no calendar. The models
+that depend on the date do: the wind reads a NCEP time axis and hands HWM14 a day of year
+and a universal time, and a lunar and solar ephemeris would need the same. The `epoch`
+section carries that absolute time, once, for all of them.
+
+```yaml
+epoch:
+  flag_epoch: False
+  datetime: '2026-03-21T03:00:00Z'
+```
+
+`flag_epoch: False` is the default and the shipped behaviour: nothing reads the date and
+the output files are exactly what they were before the section existed. With it switched
+on, `datetime` is read as UTC in ISO 8601. Quoting it keeps it a string, but an unquoted
+timestamp works as well, since PyYAML resolves it to a `datetime` of its own and the code
+accepts both; a value with no time zone is taken as UTC, and one with an offset is
+converted to it.
+
+The epoch is written into the header of `tecplot.dat` and `restart.dat` as a comment
+rather than as a column, so that the Tecplot point format keeps its purely numeric rows.
+The UTC of a row is the epoch plus its `Time[s]`.
+
+Leap seconds are not modelled: UTC is treated as a uniform time scale, which leaves the
+epoch off a strict UTC count by the number of leap seconds since the date it was written
+for. The models this feeds — a six-hourly wind grid, a lunar position good to a few
+arcminutes — are insensitive to that at the level of a second.
 
 ## Restart
 

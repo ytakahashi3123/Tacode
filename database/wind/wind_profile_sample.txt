@@ -1,0 +1,18 @@
+# Tacode wind table
+# Source: vertical profile read from profile_input.txt
+# The longitude and the latitude have one node each, so the wind depends on the altitude alone
+# Generated: 2026-09-10T03:59:47Z by generate_wind_table.py
+#
+# The wind is given in the local geocentric horizon [East, North, Up]
+# Longitude[deg.] Latitude[deg.] Altitude[km] East[m/s] North[m/s] Up[m/s]
+       0.00000    40.00000     0.00000      5.00000      0.00000      0.00000
+       0.00000    40.00000     1.00000      8.00000      1.00000      0.00000
+       0.00000    40.00000     3.00000     14.00000      2.00000      0.00000
+       0.00000    40.00000     5.00000     20.00000      2.00000      0.00000
+       0.00000    40.00000     8.00000     32.00000      1.00000      0.00000
+       0.00000    40.00000    10.00000     45.00000      0.00000      0.00000
+       0.00000    40.00000    12.00000     38.00000     -1.00000      0.00000
+       0.00000    40.00000    16.00000     18.00000     -1.00000      0.00000
+       0.00000    40.00000    20.00000      8.00000      0.00000      0.00000
+       0.00000    40.00000    25.00000     -4.00000      0.00000      0.00000
+       0.00000    40.00000    31.00000    -12.00000      0.00000      0.00000
