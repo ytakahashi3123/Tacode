@@ -36,6 +36,7 @@
 # wind.velocity_factor は風の場に一様に掛かる係数（既定 1.0）。モンテカルロで
 # テーブルの風を振るための入口で、initial_settings.density_factor と同じ流儀。
 
+import sys as sys
 import numpy as np
 import os as os
 import scipy.interpolate
@@ -113,7 +114,7 @@ def initial_settings_wind(config, epoch_dict=None):
     if velocity_wind.shape != (3,) :
       print('wind.velocity must have three components [East, North, Up] in m/s.')
       print('Program stopped.')
-      exit()
+      sys.exit(1)
     print('--Model: constant')
     print('--Wind velocity [East, North, Up] (m/s):', ', '.join(['{:g}'.format(value) for value in velocity_wind]))
     wind_dict = {KEY_MODEL: kind_wind_model, KEY_VELOCITY: velocity_wind}
@@ -128,7 +129,7 @@ def initial_settings_wind(config, epoch_dict=None):
     print('kind_wind_model in config is incorrect:', kind_wind_model)
     print('--Available: constant, fileread')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   wind_dict[KEY_FACTOR] = get_velocity_factor(section)
   if wind_dict[KEY_FACTOR] != 1.0 :
@@ -156,7 +157,7 @@ def get_velocity_factor(section):
     if len(factor) != 1 :
       print('wind.velocity_factor must be a single value (a one-element list).')
       print('Program stopped.')
-      exit()
+      sys.exit(1)
     factor = factor[0]
 
   try:
@@ -164,7 +165,7 @@ def get_velocity_factor(section):
   except (TypeError, ValueError):
     print('wind.velocity_factor must be a number:', factor)
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   return factor
 
@@ -200,7 +201,7 @@ def read_wind_file(config):
     print('--Generate one with database/wind/generate_wind_table.py, or point')
     print('--wind.directory_wind / wind.filename_wind at an existing table.')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   string_epoch = None
   row_list     = []
@@ -230,7 +231,7 @@ def read_wind_file(config):
               filename_tmp)
         print('--Every data row must have the same number of columns (6 without a time axis, 7 with one).')
         print('Program stopped.')
-        exit()
+        sys.exit(1)
       row_list.append(value_list)
 
   if len(row_list) == 0 :
@@ -238,7 +239,7 @@ def read_wind_file(config):
     print('--Each row must hold six numbers (longitude, latitude, altitude, east, north, up)')
     print('--or seven with the time from the epoch of the table in front.')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   wind_dict = build_grid(np.array(row_list), filename_tmp, num_column == NUM_COLUMN_SERIES)
 
@@ -252,7 +253,7 @@ def read_wind_file(config):
     print('wind.kind_extrapolation in config is incorrect:', kind_extrapolation)
     print('--Available: zero, clamp')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
   wind_dict[KEY_EXTRAP] = kind_extrapolation
 
   print('--Grid: {:d} times x {:d} longitudes x {:d} latitudes x {:d} altitudes'.format(
@@ -303,7 +304,7 @@ def build_grid(rows, filename_tmp, flag_time):
           len(axis_altitude), num_expected))
     print('--(times x longitudes x latitudes x altitudes)')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   wind = np.full((len(axis_time), len(axis_longitude), len(axis_latitude), len(axis_altitude), 3), np.nan)
   wind[np.searchsorted(axis_time,      time),
@@ -316,7 +317,7 @@ def build_grid(rows, filename_tmp, flag_time):
     print('--Longitudes are folded into [-180, 180), so -180 and 180 deg. are the same')
     print('--meridian and must not both appear.')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   return {KEY_TIME: axis_time, KEY_LONGITUDE: axis_longitude,
           KEY_LATITUDE: axis_latitude, KEY_ALTITUDE: axis_altitude, KEY_WIND: wind}
@@ -401,14 +402,14 @@ def set_time_offset(wind_dict, epoch_dict):
     print('--Add a line "# Epoch (UTC): <ISO 8601>" to the table, so that its time')
     print('--axis can be placed in absolute time.')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   if flag_series and epoch_dict is None :
     print('The wind table has a time axis but the epoch section of config is off.')
     print('--Set epoch.flag_epoch: True and give epoch.datetime, so that the run can')
     print('--be placed on the time axis of the table.')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   if string_epoch is None or epoch_dict is None :
     return wind_dict

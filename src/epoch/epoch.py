@@ -50,7 +50,7 @@ def initial_settings_epoch(config):
     print('Epoch is enabled but epoch.datetime is not given.')
     print('--Give the UTC date and time in ISO 8601, e.g. 2026-03-21T03:00:00Z')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   epoch_dict = {KEY_DATETIME: parse_datetime(datetime_setting)}
 
@@ -100,7 +100,7 @@ def parse_datetime_string(string_datetime):
     print('Epoch is not in ISO 8601 format:', string_datetime)
     print('--Expected something like 2026-03-21T03:00:00Z')
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   return time_epoch
 

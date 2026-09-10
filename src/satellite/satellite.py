@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys as sys
 import numpy as np
 import os as os
 import scipy.interpolate
@@ -174,12 +175,12 @@ def read_aerodynamic_file(config):
       print('--Every AOA block must list the same Knudsen numbers in the same order.')
       print('--File:', filename_tmp)
       print('Program stopped.')
-      exit()
+      sys.exit(1)
   if np.any(np.diff(kn_aero) <= 0.0) :
     print('The Knudsen numbers in the aerodynamic table are not in ascending order.')
     print('--File:', filename_tmp)
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   # 迎角ごと・Knudsen 数ごとの係数（力・モーメント）
   coefficient_force  = np.array([block[:,1:4] for block in data_block])
@@ -233,7 +234,7 @@ def parse_aerodynamic_file(filename_tmp):
         print('An "AOA" line in the aerodynamic table has no value.')
         print('--File:', filename_tmp)
         print('Program stopped.')
-        exit()
+        sys.exit(1)
       angle_of_attack.append( float(words[1]) )
       data_current = []
       data_block.append( data_current )
@@ -259,7 +260,7 @@ def parse_aerodynamic_file(filename_tmp):
     print('No data row was found in the aerodynamic table.')
     print('--File:', filename_tmp)
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   # 迎角の昇順に並べ替える
   angle_of_attack = np.array(angle_of_attack)
@@ -271,7 +272,7 @@ def parse_aerodynamic_file(filename_tmp):
     print('The aerodynamic table has duplicated angles of attack.')
     print('--File:', filename_tmp)
     print('Program stopped.')
-    exit()
+    sys.exit(1)
 
   return angle_of_attack, data_block
 
