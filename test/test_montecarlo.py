@@ -84,6 +84,32 @@ wind:
 """
 
 
+TEXT_SECTION_WITHOUT_THE_KEY = """computational_setup:
+  timestep_constant: 0.5
+  time_elapsed_maximum: 5000.0
+
+initial_settings:
+  velocity:
+    - 7450
+    - 0
+    - 0
+"""
+
+
+def rewrite_expecting_a_stop(text, key, values, section=None):
+    """書き換えが停止することを確かめ、停止したあとのファイルの中身を返す。"""
+    with tempfile.TemporaryDirectory() as directory:
+        path = os.path.join(directory, 'config.yml')
+        with open(path, 'w') as f:
+            f.write(text)
+        try:
+            montecarlo().rewrite_control(path, key, len(values), values, section)
+        except SystemExit:
+            with open(path) as f:
+                return f.read()
+        raise AssertionError('rewrite_control did not stop')
+
+
 class TestRewritingTheControlFile(unittest.TestCase):
 
     def test_the_section_decides_which_key_is_rewritten(self):
@@ -155,6 +181,39 @@ class TestRewritingTheControlFile(unittest.TestCase):
     def test_a_missing_section_stops_the_run(self):
         with self.assertRaises(SystemExit):
             rewrite(TEXT_TWO_SECTIONS, 'velocity', ['1.0'], 'atmosphere')
+
+    def test_a_key_of_another_section_is_not_rewritten(self):
+        # セクションの終わりで探索を打ち切らないと、指定したセクションにキーが無いとき
+        # ファイル末尾まで走り、あとに並ぶ別のセクションの同名キーを書き換えてしまう
+        # （computational_setup の velocity を指定して initial_settings.velocity が
+        # 動いた、という壊れ方が実際にあった）
+        text = rewrite_expecting_a_stop(TEXT_SECTION_WITHOUT_THE_KEY, 'velocity',
+                                        ['1.0', '2.0', '3.0'], 'computational_setup')
+        self.assertEqual(text, TEXT_SECTION_WITHOUT_THE_KEY)
+        self.assertEqual(yaml.safe_load(text)['initial_settings']['velocity'], [7450, 0, 0])
+
+    def test_a_comment_between_the_sections_does_not_close_the_section(self):
+        # 区切りはインデントの無い "名前:" 行。空行とコメントはセクションの内側にも
+        # 現れるので、そこで打ち切ってはならない
+        text = """wind:
+  flag_wind: True
+
+# [East, North, Up], m/s
+# （桁を詰めて書かれたコメントでも、セクションはまだ終わっていない）
+
+  velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+
+atmosphere:
+  velocity:
+    - 9.9
+"""
+        result = rewrite(text, 'velocity', ['1.0', '2.0', '3.0'], 'wind')
+        config = yaml.safe_load(result)
+        self.assertEqual(config['wind']['velocity'], [1.0, 2.0, 3.0])
+        self.assertEqual(config['atmosphere']['velocity'], [9.9])
 
     def test_a_missing_key_stops_the_run(self):
         with self.assertRaises(SystemExit):
@@ -272,6 +331,112 @@ class TestTheWindMonteCarloTutorial(unittest.TestCase):
             # 変数行はケースの出力から引き継ぐので、風の列がそのまま出ている
             self.assertEqual(text.count('Variables ='), 1)
             self.assertIn('WindE[m/s]', text)
+
+
+class TestDetectingCasesWhichFail(unittest.TestCase):
+    """
+    ケースが落ちたことを親が検知すること。
+
+    子の終了コードを見ずに待つだけだと、100 ケースのうち 3 ケースが落ちても
+    親は exit 0 を返し、統計は残った 97 ケースから静かに作られる。
+    """
+
+    def build(self, directory, flag_allow_failure=False):
+        driver = montecarlo()
+        driver.work_dir = directory
+        driver.case_dir = 'case'
+        driver.filename_trajectory_tacode = os.path.join('output_result', 'tecplot.dat')
+        driver.flag_allow_failure = flag_allow_failure
+        return driver
+
+    def test_a_non_zero_exit_code_is_recorded(self):
+        driver = self.build('work')
+        process = subprocess.Popen([sys.executable, '-c', 'raise SystemExit(3)'])
+        driver.process_list = [['work/case0001', process]]
+        driver.wait_tacode()
+        self.assertEqual(driver.case_failed, [['work/case0001', 3]])
+        self.assertEqual(driver.process_list, [])
+
+    def test_a_case_which_succeeds_is_not_recorded(self):
+        driver = self.build('work')
+        process = subprocess.Popen([sys.executable, '-c', 'pass'])
+        driver.process_list = [['work/case0001', process]]
+        driver.wait_tacode()
+        self.assertEqual(driver.case_failed, [])
+
+    def test_a_case_without_a_result_file_is_found(self):
+        # 子が 0 を返しても出力を書いていないことがある（そのまま統計から消える）
+        with tempfile.TemporaryDirectory() as directory:
+            write_case(directory, 'case0001', (6378.137, 1.0, 0.0), (25.0, 10.0, 0.0))
+            case = write_case(directory, 'case0002', (6378.137, -1.0, 0.0), (15.0, 10.0, 0.0))
+            os.remove(os.path.join(case, 'output_result', 'tecplot.dat'))
+
+            driver = self.build(directory)
+            driver.check_case_result()
+            self.assertEqual(driver.case_no_result, [os.path.join(directory, 'case0002')])
+
+    def test_the_report_stops_the_run(self):
+        driver = self.build('work')
+        driver.case_failed = [['work/case0001', 1]]
+        with self.assertRaises(SystemExit) as raised:
+            driver.report_failure()
+        self.assertEqual(raised.exception.code, 1)
+
+    def test_the_report_is_silent_when_every_case_completes(self):
+        self.assertEqual(self.build('work').report_failure(), 0)
+
+    def test_the_flag_lets_the_run_go_on(self):
+        driver = self.build('work', flag_allow_failure=True)
+        driver.case_failed = [['work/case0001', 1]]
+        driver.case_no_result = ['work/case0002']
+        self.assertEqual(driver.report_failure(), 2)
+
+    def test_a_case_which_fails_and_writes_nothing_counts_once(self):
+        # 落ちたケースは結果ファイルも書いていないので、両方の記録に挙がる
+        driver = self.build('work', flag_allow_failure=True)
+        driver.case_failed = [['work/case0001', 1]]
+        driver.case_no_result = ['work/case0001']
+        self.assertEqual(driver.report_failure(), 1)
+
+    def test_a_case_is_not_counted_twice(self):
+        driver = self.build('work')
+        driver.add_case_no_result('work/case0001')
+        driver.add_case_no_result('work/case0001')
+        self.assertEqual(driver.case_no_result, ['work/case0001'])
+
+    def test_the_driver_returns_a_non_zero_exit_code(self):
+        # 結線を丸ごと通す: テンプレートの設定を壊し、driver が失敗を返すこと。
+        # ケースは初期化で落ちるので、計算そのものは走らない
+        with tempfile.TemporaryDirectory() as directory:
+            template = os.path.join(directory, 'template')
+            shutil.copytree(TEMPLATE_WIND, template)
+            path_template = os.path.join(template, 'config.yml')
+            with open(path_template) as f:
+                text = f.read()
+            with open(path_template, 'w') as f:
+                f.write(text.replace('kind_atmosphere_model: fileread',
+                                     'kind_atmosphere_model: bogus'))
+
+            with open(CONFIG_MONTECARLO_WIND) as f:
+                config = yaml.safe_load(f)
+            config['montecarlo']['number_iteration'] = 2
+            config['montecarlo']['maximum_number_execution'] = 2
+            config['montecarlo']['template_path_specify'] = 'manual'
+            config['montecarlo']['template_path'] = template
+            config['montecarlo']['work_dir'] = 'work'
+            config['montecarlo']['result_dir'] = 'result'
+            with open(os.path.join(directory, 'config.yml'), 'w') as f:
+                yaml.safe_dump(config, f)
+
+            environment = dict(os.environ)
+            environment['TACODE_PYTHON'] = sys.executable
+            done = subprocess.run([sys.executable,
+                                   os.path.join(ROOT_DIR, 'src', 'tacode-montecarlo.py'),
+                                   '-file', 'config.yml'],
+                                  cwd=directory, env=environment,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self.assertNotEqual(done.returncode, 0)
+            self.assertIn('Cases that did not complete:', done.stdout.decode())
 
 
 def shorten_the_run(path, time_elapsed_maximum):

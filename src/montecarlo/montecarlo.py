@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys as sys
 import numpy as np
 import os as os
 import glob as glob
@@ -14,6 +15,15 @@ class montecarlo(orbital):
   def __init__(self):
 
     print("Constructing class: montecarlo")
+
+    # 失敗したケースの記録
+    # --親が失敗を検知できるようにするためのもの。終了コードを見ずに待つだけだと、
+    #   ケースが落ちても親は次へ進み、統計は残ったケースから静かに作られる。
+    # --__init__で持つのは、initial_settingsを通さずにpostprocessだけを呼ぶ
+    #   使い方（テスト）でも属性が在ることを保証するため。
+    self.case_failed        = []     # [ケースディレクトリ, 終了コード]
+    self.case_no_result     = []     # 結果ファイルが無い（または空の）ケース
+    self.flag_allow_failure = False
 
     return
 
@@ -51,6 +61,7 @@ class montecarlo(orbital):
     # --全ケースの計算が終わったあと、postprocessが1つのTecplotファイルにまとめる。
     #   古いconfigにこれらのキーが無くても動くようにget_settingで読む
     section = config['montecarlo']
+    self.flag_allow_failure = bool( get_setting(section, 'flag_allow_failure', False) )
     self.result_dir       = get_setting(section, 'result_dir', 'result_tacode')
     self.flag_tecplot     = bool( get_setting(section, 'flag_tecplot', False) )
     self.filename_tecplot = get_setting(section, 'filename_tecplot', 'tecplot_montecarlo.dat')
@@ -60,6 +71,18 @@ class montecarlo(orbital):
       super().make_directory(self.result_dir)
 
     return
+
+
+  def is_toplevel(self, line):
+    #
+    # YAMLのトップレベルのキー（インデントの無い"名前:"行）かどうか。
+    # 空行とコメント行はセクションの内側にも現れるので、区切りとは見ない。
+    #
+    line_strip = line.strip()
+    if line_strip == '' or line_strip.startswith('#') :
+      return False
+
+    return not line[0].isspace()
 
 
   def rewrite_control(self,filename,txt_indentified,ele_indentified,txt_replaced,txt_root=None):
@@ -81,20 +104,29 @@ class montecarlo(orbital):
     # リストとして取得
     lines_strip = [line.strip() for line in lines]
 
-    # 探索の開始位置を決める（セクション名はトップレベルなのでインデントが無い）
+    # 探索の範囲を決める（セクション名はトップレベルなのでインデントが無い）
+    #
+    # 終わりで閉じるのが要点である。閉じないと、指定したセクションにキーが無いとき
+    # 探索がファイル末尾まで走り、別のセクションの同名キーを書き換えてしまう
+    # （wind.velocityとinitial_settings.velocityのような組）。
     i_start = 0
+    i_end   = len(lines)
     if txt_root is not None:
       i_root = [i for i, line in enumerate(lines) if line.startswith(txt_root+':')]
       if len(i_root) == 0:
         print('Section is not found in the control file:', txt_root, ',File:', filename)
-        exit()
+        sys.exit(1)
       i_start = i_root[0]
+      # 次のトップレベルのキー（インデントの無い行。空行とコメントは除く）でセクションが終わる
+      i_next = [i for i in range(i_start+1, len(lines)) if self.is_toplevel(lines[i])]
+      if len(i_next) > 0:
+        i_end = i_next[0]
 
     # キーの行を特定する
-    i_key = [i for i in range(i_start, len(lines)) if lines_strip[i].startswith(txt_indentified+':')]
+    i_key = [i for i in range(i_start, i_end) if lines_strip[i].startswith(txt_indentified+':')]
     if len(i_key) == 0:
       print('Variable is not found in the control file:', txt_indentified, ',Section:', txt_root, ',File:', filename)
-      exit()
+      sys.exit(1)
     i_key = i_key[0]
 
     # キーの直後に並ぶリスト要素を置換する
@@ -104,7 +136,7 @@ class montecarlo(orbital):
       # Replace (words[0]に該当する'-'は置換しない、その次のwords[1]を置換する)
       if len(words) < 2 or words[0] != '-':
         print('Variable is not a list of', ele_indentified, 'elements:', txt_indentified, ',Section:', txt_root, ',File:', filename)
-        exit()
+        sys.exit(1)
       words[1] = txt_replaced[m]
       # インデントを考慮して新しい行を構築する
       indent       = lines[i_line][:len(lines[i_line])-len(lines[i_line].lstrip())]
@@ -125,24 +157,102 @@ class montecarlo(orbital):
     maximum_number_execution = config['montecarlo']['maximum_number_execution']
     
     # 計算ディレクトリに移動、実行、元ディレクトリに戻る
+    # --戻すのはtry/finallyの中。途中で例外が出たまま戻らないと、以降のケースが
+    #   前のケースのディレクトリの中に作られる
     os.chdir( self.work_dir_case )
-    #subprocess.call('pwd')
+    try:
+      # Get relative path
+      current_path  = os.getcwd()
+      relative_path = os.path.relpath(self.cmd_home, current_path)
 
-    # Get relative path
-    current_path  = os.getcwd()
-    relative_path = os.path.relpath(self.cmd_home, current_path)
-    
-    # Run Tacode
-    process = subprocess.Popen([self.cmd_tacode, relative_path])
-    self.process_list.append(process)
+      # Run Tacode（子プロセスのカレントディレクトリは起動時に決まるので、
+      # このあとで親が戻っても影響しない）
+      process = subprocess.Popen([self.cmd_tacode, relative_path])
+      self.process_list.append( [self.work_dir_case, process] )
+    finally:
+      os.chdir( self.root_dir )
+
     if self.iter%maximum_number_execution == 0 or self.iter == num_iteration:
-      for subprocess in self.process_list:
-        subprocess.wait()
-      self.process_list = []
-
-    os.chdir( self.root_dir )
+      self.wait_tacode()
 
     return
+
+
+  def wait_tacode(self):
+    #
+    # 走らせたケースの終了を待ち、終了コードを確認する。
+    #
+    # 待つだけで戻り値を捨てると、ケースが落ちたことが誰にも伝わらない。
+    # ここで数えておいて、最後にreport_failureが報告する。
+    #
+    for case_dir, process in self.process_list:
+      returncode = process.wait()
+      if returncode != 0 :
+        print('--Caution: the case failed, exit code', returncode, ':', case_dir)
+        self.case_failed.append( [case_dir, returncode] )
+
+    self.process_list = []
+
+    return
+
+
+  def add_case_no_result(self, case_dir):
+    #
+    # 結果ファイルが無い（または空の）ケースを記録する。二重に数えない。
+    #
+    if case_dir not in self.case_no_result :
+      self.case_no_result.append(case_dir)
+
+    return
+
+
+  def check_case_result(self):
+    #
+    # 全ケースに結果ファイルが在ることを確かめる。
+    #
+    # 終了コードだけでは足りない: 子が0を返しても出力を書いていないことがあり、
+    # flag_tecplotがFalseだとpostprocessが走らないのでそこの検査も通らない。
+    #
+    for case in self.get_case_directory():
+      filename_tmp = case+'/'+self.filename_trajectory_tacode
+      if not os.path.exists(filename_tmp) :
+        self.add_case_no_result(case)
+
+    return
+
+
+  def report_failure(self):
+    #
+    # 失敗したケースを報告する。既定では1つでも失敗していれば停止する（exit 1）。
+    #
+    # montecarlo.flag_allow_failureをTrueにしたときだけ、件数を報告して続ける。
+    # 「100ケースのうち3ケースが黙って落ちて、統計は97ケースから作られていた」
+    # という結果を残さないためのもの。
+    #
+    # 同じケースが「終了コードが 0 でない」と「結果ファイルが無い」の両方に
+    # 挙がるので、ケースの数として数え直す
+    case_all = [case_dir for case_dir, returncode in self.case_failed]
+    for case_dir in self.case_no_result:
+      if case_dir not in case_all :
+        case_all.append(case_dir)
+
+    number_failed = len(case_all)
+    if number_failed == 0 :
+      return 0
+
+    print('Cases that did not complete: ', number_failed)
+    for case_dir, returncode in self.case_failed:
+      print('--Exit code', returncode, ':', case_dir)
+    for case_dir in self.case_no_result:
+      print('--No result file:', case_dir+'/'+self.filename_trajectory_tacode)
+
+    if self.flag_allow_failure :
+      print('--montecarlo.flag_allow_failure is True, so the run goes on with the cases that did complete.')
+      return number_failed
+
+    print('--Set montecarlo.flag_allow_failure: True to go on with the cases that did complete.')
+    print('Program stopped.')
+    sys.exit(1)
 
 
   def get_case_directory(self):
@@ -206,11 +316,13 @@ class montecarlo(orbital):
       filename_tmp = case+'/'+self.filename_trajectory_tacode
       if not os.path.exists(filename_tmp) :
         print('--Caution: the case has no result file, skipped:', filename_tmp)
+        self.add_case_no_result(case)
         continue
 
       variables, data = self.read_tecplot_case(filename_tmp)
       if len(data) == 0 :
         print('--Caution: the case has no data line, skipped:', filename_tmp)
+        self.add_case_no_result(case)
         continue
 
       if file is None :
@@ -227,7 +339,7 @@ class montecarlo(orbital):
         file.close()
         print('The cases do not share the same variables:', filename_tmp)
         print('Program stopped.')
-        exit()
+        sys.exit(1)
 
       # ゾーンの点数はケースごとに数え直す（着地する時刻が違うので行数が揃わない）
       file.write('zone t="'+os.path.basename(case)+'" i= '+str(len(data))+' f=point'+self.newline_code)
@@ -302,4 +414,7 @@ class montecarlo(orbital):
     print('Postprocess: gathering the results')
     self.postprocess()
 
-    return
+    # 落ちたケースの報告（既定では停止する）
+    self.check_case_result()
+
+    return self.report_failure()

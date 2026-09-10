@@ -638,6 +638,27 @@ file to gather inside each case, `output_result/tecplot.dat` by default; set
 cases (the 100 cases of the wind tutorial below add up to some 90 MB). Statistics of the
 impact points are not computed here — that is what `montecarlo_dispersion.py` above does.
 
+### A case which does not complete
+
+The driver waits for every case, looks at its exit code, and checks that it left a result
+file behind. If any case did not complete it lists them and stops with a non-zero exit
+code, so that a broken run is not mistaken for a finished one:
+
+```
+Cases that did not complete:  2
+--Exit code 1 : work_montecarlo/case0003
+--No result file: work_montecarlo/case0003/output_result/tecplot.dat
+--Set montecarlo.flag_allow_failure: True to go on with the cases that did complete.
+Program stopped.
+```
+
+Set `montecarlo.flag_allow_failure: True` to report the failed cases and carry on with the
+ones that did complete. This matters most for a large run: the statistics are built from
+the cases that wrote a result, so three cases failing quietly out of a hundred would
+otherwise leave a plot that looks perfectly reasonable. `run_tacode-mc.sh` pipes the run
+through `tee`, so it sets `pipefail` to return the exit code of the run itself rather than
+that of `tee`.
+
 ### Scattering the wind
 
 ```console
@@ -754,7 +775,7 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | `test_moment_term.py` | Torque-free motion conserves the angular momentum and the energy, an axisymmetric body precesses at the analytic rate, the gravity-gradient torque matches its closed form and vanishes for an isotropic body, and the damping term removes rotational energy |
 | `test_solver_attitude.py` | A 6-DOF run keeps the state arrays aligned with the trajectory, the pitch oscillation matches its analytic period, planar motion stays planar, damping shrinks the amplitude, and the aerodynamic force at zero incidence equals the 3-DOF drag |
 | `test_regression_3dof.py` | With the attitude switched off, both tutorial cases reproduce the reference outputs committed in `tutorial/`, and a configuration carrying an `attitude` section set to `False` gives exactly the same trajectory as one without the section |
-| `test_montecarlo.py` | The Monte-Carlo driver rewrites the right line of the control file: the section tells `wind.velocity` apart from `initial_settings.velocity`, lines that happen to hold the same value are not rewritten together, and a missing section, a missing key or a key which is not a list stops the run. The wind tutorial and its template agree with each other, and two shortened cases actually run and come out different. The postprocess gathers the cases into one Tecplot file: one zone per case with its own point count, the template left out, a case without a result skipped, and cases whose columns disagree stopping the run. The animation helper is checked on its geometry — the offsets from the reference at the same time, the window that holds every point, the unwrapped longitude — and on actually writing a frame, a self-contained `.html` and the 3D view, which is skipped without matplotlib |
+| `test_montecarlo.py` | The Monte-Carlo driver rewrites the right line of the control file: the section tells `wind.velocity` apart from `initial_settings.velocity`, lines that happen to hold the same value are not rewritten together, the search is closed at the end of the section so that a key of another section is never rewritten, and a missing section, a missing key or a key which is not a list stops the run. A case which exits with a non-zero code or writes no result file is counted, and the run stops with a non-zero exit code unless `flag_allow_failure` is set. The wind tutorial and its template agree with each other, and two shortened cases actually run and come out different. The postprocess gathers the cases into one Tecplot file: one zone per case with its own point count, the template left out, a case without a result skipped, and cases whose columns disagree stopping the run. The animation helper is checked on its geometry — the offsets from the reference at the same time, the window that holds every point, the unwrapped longitude — and on actually writing a frame, a self-contained `.html` and the 3D view, which is skipped without matplotlib |
 | `test_helper_config.py` | The settings file of the post-processing tools: the order of precedence (command line, then the file, then the default), a list-valued option, a missing file being no error, and an unknown key, a malformed section or a missing required value stopping the run. `--save-config` writes what can be read back and keeps the other sections, all three tools read the file the same way, and the `config_helper.yml` shipped with the tutorials is accepted by the tool it belongs to |
 | `test_helper_visualization.py` | The post-processing tools in `src_helper/`: the Tecplot reader on both a 3-DOF and a 6-DOF output, the vehicle shapes (front distinguishable from back, roll visible), and the animation script writing an actual still, an `.html` animation as one self-contained file, and an `.mp4`. The drawing tests are skipped when matplotlib is not installed, and the `.mp4` one when `ffmpeg` is not |
 | `test_attitude_verification.py` | Problems whose answer is known in closed form, solved by the production solver: the order of convergence, the Jacobi-elliptic solution of the torque-free asymmetric body, conservation of the angular momentum vector in inertial space, the precession of an axisymmetric body, the logarithmic decrement of a damped oscillation, the gravity-gradient libration frequency in a circular orbit, and the axisymmetry of the tabulated aerodynamics |

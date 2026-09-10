@@ -308,6 +308,14 @@ montecarlo:
   # Maximum number of execution in parallel
   maximum_number_execution: 8
 
+  # Treatment of a case which does not complete
+  # --False (default): if any case exits with a non-zero code, or writes no result
+  #   file, the run stops with a non-zero exit code once every case has been waited
+  #   for. Without this the statistics were quietly built from the cases that
+  #   happened to survive.
+  # --True: report how many cases failed and go on with the ones that did complete.
+  flag_allow_failure: False
+
   # Target variables to be changed in the Monte Carlo routine
   # --[variable name, section name, dispersion]; the value is replaced by
   #   value*(1 + (rand-0.5)*dispersion), element by element, so the target

@@ -282,6 +282,10 @@ montecarlo:
   # Maximum number of execution in parallel
   maximum_number_execution: 8
 
+  # Stop if any case does not complete (False, the default), or go on with the
+  # cases that did complete (True)
+  flag_allow_failure: False
+
   # Gathered result of all the cases (one Tecplot file, one zone per case)
   result_dir: result_tacode
   flag_tecplot: True

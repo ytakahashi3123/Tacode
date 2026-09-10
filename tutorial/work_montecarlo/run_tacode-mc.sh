@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# tee でログを取るので、パイプの左（Python）の終了コードを拾うために pipefail を立てる
+# （既定では tee の終了コードが返り、計算が落ちてもシェルは 0 を返す）
+set -o pipefail
+
 TACODE_HOME=../../src
 
 # Python interpreter, in order of preference:
