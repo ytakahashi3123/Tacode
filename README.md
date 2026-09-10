@@ -17,6 +17,8 @@ By default the object is a point mass with **three degrees of freedom**, and the
 Since v2.3.0 the attitude can be solved as well, giving **six degrees of freedom**. The rigid body then rotates under the aerodynamic, damping and gravity-gradient moments, and the aerodynamic force follows the attitude through the angle of attack, so that the trajectory and the attitude are coupled in both directions. The attitude is carried by a quaternion, and the aerodynamic coefficients are interpolated from a table in the angle of attack as well as in the Knudsen number.
 The attitude is switched off unless `attitude.flag_attitude` is set, and a configuration without an `attitude` section reproduces the earlier three-degree-of-freedom results bit for bit.
 
+Since v2.4.0 the **wind** can be taken into account, so that the atmosphere no longer has to co-rotate with the Earth as a rigid body: the aerodynamics is then evaluated at the air-relative velocity, which reaches the drag, the moments, the dynamic pressure and the angle of attack alike. The wind is either one uniform vector or a table of up to four dimensions — time, longitude, latitude and altitude — prepared offline from NCEP reanalysis for the lower atmosphere and HWM14 for the thermosphere. It is switched off unless `wind.flag_wind` is set, and a configuration without a `wind` section reproduces the earlier results bit for bit.
+
 ![Atmospheric-entry trajectories for initial velocities of 7250, 7450, and 7650 m/s](figure/trajectory.jpg)
 
 The trajectories above were written to `geodetic.kml` by the KML output and rendered

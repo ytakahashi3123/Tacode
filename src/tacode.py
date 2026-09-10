@@ -2,10 +2,10 @@
 #!/usr/bin/env python3
 
 # Tacode: Trajectory analysis code
-# Version 2.3.1
+# Version 2.4.0
 
 # Author: Yusuke Takahashi, Hokkaido University
-# Date: 2026/09/09
+# Date: 2026/09/10
 
 
 import sys as sys
