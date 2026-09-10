@@ -385,8 +385,11 @@ Tutorial cases:
 | `tutorial/work_reentry` | atmospheric entry at 7450 m/s from 150 km |
 | `tutorial/work_reentry_6dof` | the same entry with the attitude solved, 1000 s (about 13 s of run time) |
 | `tutorial/work_montecarlo` | several cases run in parallel |
+| `tutorial/work_montecarlo_wind` | the same entry with the wind switched on, scattered case by case |
+| `tutorial/work_reentry_wind_table` | the same entry flown through a real wind table (NCEP + HWM14) |
 
-`tutorial_template` is the template used to create a new case (copy it to a new directory).
+`tutorial_template` is the template used to create a new case (copy it to a new directory),
+and `tutorial_template_wind` is the one the wind Monte-Carlo tutorial copies.
 
 Each case directory carries the tables it uses in its own `database` subdirectory, and
 `config.yml` points at them with a path relative to the current directory:
@@ -480,6 +483,29 @@ holds one directory per module. **They never run the solver** — they read the 
 already written, which is why matplotlib stays out of the requirements for the computation
 itself.
 
+Each tool takes its settings either on the command line or from a settings file,
+**`config_helper.yml` in the current directory**, in the same way the solver reads
+`config.yml`. One section per tool, keys named after the long options, and the command
+line wins when both are given:
+
+```yaml
+animate_trajectory:
+  filename: output_result/tecplot.dat
+  output: attitude.mp4
+
+montecarlo_animation:
+  directory: work_montecarlo_wind
+  view: 3d
+  spin: 0.0
+```
+
+An unknown key stops the run rather than being ignored, a missing file is not an error,
+and `-file` points at another one. `tutorial/work_reentry_6dof/config_helper.yml` and
+`tutorial/work_montecarlo_wind/config_helper.yml` are shipped with those tutorials, so
+the tools can be run there with no arguments at all; `--save-config` writes the settings
+in effect back out as a starting point, or as a record of what produced a figure. See
+`src_helper/general/README.md`.
+
 ```console
 cd tutorial/work_reentry_6dof
 ./run_tacode.sh
@@ -521,6 +547,64 @@ writes a still instead, in whatever format matplotlib infers from the extension 
 
 See `src_helper/animate_trajectory/README.md` for the full list of options.
 
+### Dispersion of a Monte-Carlo run
+
+```console
+cd tutorial/work_montecarlo_wind
+python3 ../../src_helper/montecarlo_dispersion/montecarlo_dispersion.py work_montecarlo_wind
+```
+
+`montecarlo_dispersion.py` reads the last point of every case of a Monte-Carlo run and
+reports how far each one lies from the others, resolved east and north in the local
+horizon. The inputs that were dispersed are listed alongside: the tool compares each
+case's control file with the `case_template` the driver leaves next to the cases, so it
+reports whatever actually differs without being configured. `--reference` measures the
+offsets from another run instead of from the mean of the cases, `-o` writes the table as
+CSV, and `--plot` draws the scatter (matplotlib, needed for that option only).
+
+See `src_helper/montecarlo_dispersion/README.md` for the full list of options.
+
+### Animation of a Monte-Carlo run
+
+```console
+cd tutorial/work_montecarlo_wind
+python3 ../../src_helper/montecarlo_animation/montecarlo_animation.py work_montecarlo_wind \
+    --reference ../work_reentry/output_result/tecplot.dat \
+    --mark "NCEP+HWM14 table=../work_reentry_wind_table/output_result/tecplot.dat" \
+    -o montecarlo_dispersion.mp4
+```
+
+`montecarlo_animation.py` animates the cases of a Monte-Carlo run together with their
+dispersion ellipses. The right-hand panel carries the point of it: every case is drawn
+where it is **relative to the reference case at the same time**, in the local horizon, so
+the cloud is seen growing out of a single point into the final ellipse, with the 1, 2 and
+3 sigma ellipses and the CEP 50 % circle redrawn at every frame. The panel on the lower
+left puts the 1 sigma spread on the same time axis as the altitude, which is where one
+reads off *when* — and so at what altitude — the wind did its work. The points are
+coloured by the wind of each case, so the fan is ordered by the input that made it.
+
+`--view 3d` swaps the ground track for the trajectories themselves, in a box of
+**longitude, latitude and altitude**: the absolute path the run computed, with the
+dispersion ellipses lying on the floor at the impact point. `--view globe` draws the same
+absolute trajectories in ECEF with the Earth around them, and `--exaggerate` stretches
+the altitude about the surface when the descent itself is what should be visible (150 km
+is 2 % of the radius). In both, the 100 cases lie on one another at that scale, so they
+are drawn as a single bundle.
+
+`--view 3d-relative` measures the same box **from the reference case at the same time**
+instead. That is the view for the dispersion itself: the bundle comes down tight and
+unravels into the ellipse, each case coloured by its wind. The box is not to scale — tens
+of kilometres across against a descent of 150 km — and `--altitude-max` cuts it down to
+the part where the spread is built (40 km for the wind tutorial). `--spin 0` keeps the
+camera still in any of the three.
+
+The output format follows the extension of `-o` (`.mp4`, `.gif`, or a self-contained
+`.html`), and `--snapshot -1` writes the last frame as a single image instead — the
+figure to put in a report. `--mark` follows a run that is not part of the set, drawn as a
+star with its own trail and left out of the statistics.
+
+See `src_helper/montecarlo_animation/README.md` for the full list of options.
+
 ## Monte-Carlo simulation
 
 ```console
@@ -531,6 +615,115 @@ cd tutorial/work_montecarlo
 Tutorial case: `tutorial/work_montecarlo`.
 It copies `tutorial_template` for each case and runs them in parallel
 (`number_iteration` cases, up to `maximum_number_execution` at a time).
+
+Each entry of `montecarlo.target_variable` is `[variable, section, dispersion]`. The
+nominal value is read from the Monte-Carlo control file, and the matching lines of the
+copied control file are overwritten case by case with
+
+```
+value * (1 + dispersion*(U - 0.5)),   U uniform in [0, 1)
+```
+
+that is, a uniform relative scatter of +-`dispersion`/2 on each element of the list. The
+scatter is **relative**, so an element whose nominal value is `0.0` stays `0.0` in every
+case. The **section** is what tells `wind.velocity` apart from `initial_settings.velocity`.
+
+Once every case has run, the driver gathers their Tecplot outputs into a single file,
+`montecarlo.result_dir/montecarlo.filename_tecplot`, with one zone per case, so that all
+the trajectories can be loaded at once. The variables line is carried over from the cases
+themselves, so the columns follow whatever the run wrote, and cases that disagree on their
+columns stop the run rather than being mixed. `montecarlo.filename_trajectory` names the
+file to gather inside each case, `output_result/tecplot.dat` by default; set
+`flag_tecplot: False` to skip the step, which is worth doing for a long run with many
+cases (the 100 cases of the wind tutorial below add up to some 90 MB). Statistics of the
+impact points are not computed here — that is what `montecarlo_dispersion.py` above does.
+
+### Scattering the wind
+
+```console
+cd tutorial/work_montecarlo_wind
+./run_tacode-mc.sh
+python3 ../../src_helper/montecarlo_dispersion/montecarlo_dispersion.py work_montecarlo_wind \
+    --reference ../work_reentry/output_result/tecplot.dat
+```
+
+Tutorial case: `tutorial/work_montecarlo_wind`, which copies `tutorial_template_wind`.
+The template is the entry of `tutorial/work_reentry` with the wind switched on: a uniform
+20 m/s east and 10 m/s north, scattered by +-50 % case by case. The vehicle of that case
+is light (`m/(CD A)` of about 9.8 kg/m2) and spends some 1000 s below 32 km, so the wind
+is not a perturbation there but a leading term.
+
+`montecarlo_dispersion.py` collects the impact point of every case. Measured from the
+same entry **without** wind, one run of the 100 cases gives
+
+```
+Mean offset from the origin:  East +27.409 km,  North +7.835 km
+Standard deviation:  East 8.407 km,  North 4.185 km
+```
+
+The mean offset is where the nominal wind puts the impact point, and the standard
+deviation is what the uncertainty on that wind costs. The cases are drawn at random and
+no seed is set, so the numbers still move by a few hundred metres from run to run at 100
+cases; the whole run takes some 20 s.
+
+`--plot` draws the cases with their 1, 2 and 3 sigma covariance ellipses and the CEP 50 %
+circle. Ellipses rather than circles: a wind uncertainty spreads the impact point mostly
+along the direction the wind blows, and in this case the scatter is twice as wide east to
+west as it is north to south.
+
+Scattering `initial_settings.density_factor` by +-10 % as well (it is in the control
+file, commented out) spreads the impact point by some 80 km along the ground track, an
+order of magnitude more than the wind, and the wind then hides inside it — which is the
+reason the tutorial scatters one at a time.
+
+### A real wind field
+
+A uniform wind is only an estimate. `tutorial/work_reentry_wind_table` flies the same
+entry through `database/wind/wind_merged_20240101_pacific.txt` — NCEP/NCAR Reanalysis 1
+for 2024-01-01T00Z below 31 km, HWM14 above, merged through a 20-30 km transition layer:
+
+```console
+cd tutorial/work_reentry_wind_table
+./run_tacode.sh
+```
+
+The impact point moves 12.8 km (10.1 km west, 7.9 km north) from the calm case, not the
+29 km east a uniform 20 m/s suggests, and it moves the other way: most of the deflection
+is picked up between 80 and 150 km, where the vehicle spends 1552 s and NCEP has no data
+at all. Marking it on the Monte-Carlo plot puts the two side by side:
+
+```console
+cd tutorial/work_montecarlo_wind
+python3 ../../src_helper/montecarlo_dispersion/montecarlo_dispersion.py work_montecarlo_wind \
+    --reference ../work_reentry/output_result/tecplot.dat \
+    --mark "NCEP+HWM14 table=../work_reentry_wind_table/output_result/tecplot.dat" \
+    --plot work_montecarlo_wind/dispersion.png
+```
+
+The star lands outside the 3 sigma ellipse of the constant-wind cases, on the far side of
+the calm impact point. Scattering a uniform wind measures the sensitivity to a wind; it
+does not bracket the wind that was actually there.
+
+A wind **table** cannot be scattered directly, since the driver varies numbers in the
+control file and a table is selected by its file name. What can be scattered is
+`wind.velocity_factor`, which scales the whole field:
+
+```yaml
+  target_variable:
+    -
+      - velocity_factor # Variable name
+      - wind # Variable's root name
+      - 0.4          # Dispersion in random
+```
+
+Copy `tutorial/work_reentry_wind_table` to serve as the template (its `run_tacode.sh`
+takes the path of `src/` as `$1`, as `tutorial_template_wind/run_tacode.sh` does) and
+point `montecarlo.template_path` at it. Scattering the merged NCEP+HWM14 field by +-20 %
+in this way moves the impact point by 10.1 km west and 7.8 km north on average — the
+nominal table, as it must be — with a standard deviation of 1.05 km east-west and 0.82 km
+north-south. That measures the uncertainty on the *strength* of a known field, which is a
+different question from the +-50 % on a uniform wind above; neither brackets the error of
+the field itself.
 
 
 ## Configuration file
@@ -561,12 +754,14 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | `test_moment_term.py` | Torque-free motion conserves the angular momentum and the energy, an axisymmetric body precesses at the analytic rate, the gravity-gradient torque matches its closed form and vanishes for an isotropic body, and the damping term removes rotational energy |
 | `test_solver_attitude.py` | A 6-DOF run keeps the state arrays aligned with the trajectory, the pitch oscillation matches its analytic period, planar motion stays planar, damping shrinks the amplitude, and the aerodynamic force at zero incidence equals the 3-DOF drag |
 | `test_regression_3dof.py` | With the attitude switched off, both tutorial cases reproduce the reference outputs committed in `tutorial/`, and a configuration carrying an `attitude` section set to `False` gives exactly the same trajectory as one without the section |
+| `test_montecarlo.py` | The Monte-Carlo driver rewrites the right line of the control file: the section tells `wind.velocity` apart from `initial_settings.velocity`, lines that happen to hold the same value are not rewritten together, and a missing section, a missing key or a key which is not a list stops the run. The wind tutorial and its template agree with each other, and two shortened cases actually run and come out different. The postprocess gathers the cases into one Tecplot file: one zone per case with its own point count, the template left out, a case without a result skipped, and cases whose columns disagree stopping the run. The animation helper is checked on its geometry — the offsets from the reference at the same time, the window that holds every point, the unwrapped longitude — and on actually writing a frame, a self-contained `.html` and the 3D view, which is skipped without matplotlib |
+| `test_helper_config.py` | The settings file of the post-processing tools: the order of precedence (command line, then the file, then the default), a list-valued option, a missing file being no error, and an unknown key, a malformed section or a missing required value stopping the run. `--save-config` writes what can be read back and keeps the other sections, all three tools read the file the same way, and the `config_helper.yml` shipped with the tutorials is accepted by the tool it belongs to |
 | `test_helper_visualization.py` | The post-processing tools in `src_helper/`: the Tecplot reader on both a 3-DOF and a 6-DOF output, the vehicle shapes (front distinguishable from back, roll visible), and the animation script writing an actual still, an `.html` animation as one self-contained file, and an `.mp4`. The drawing tests are skipped when matplotlib is not installed, and the `.mp4` one when `ffmpeg` is not |
 | `test_attitude_verification.py` | Problems whose answer is known in closed form, solved by the production solver: the order of convergence, the Jacobi-elliptic solution of the torque-free asymmetric body, conservation of the angular momentum vector in inertial space, the precession of an axisymmetric body, the logarithmic decrement of a damped oscillation, the gravity-gradient libration frequency in a circular orbit, and the axisymmetry of the tabulated aerodynamics |
 | `test_regression_6dof.py` | The 6-DOF tutorial case, run for its full 1000 s, reproduces the `tecplot.dat`, `restart.dat` and `geodetic.kml` committed in `tutorial/work_reentry_6dof` |
 | `test_timestep_attitude.py` | The timestep itself: the `T/20` criterion the solver warns at is the first one whose numerical damping disappears, the order of convergence survives the atmosphere table, the angle-of-attack table is only C0 and costs the fourth order, and the shipped `dt = 0.05 s` is converged |
 | `test_epoch.py` | The absolute time: an ISO 8601 epoch is read from the configuration in every form PyYAML can hand over, the derived day of year, universal time and Julian date are right across a leap year and a year boundary, the Julian date agrees with `astropy` where it is installed, and the epoch stays off in every configuration shipped with the code |
-| `test_wind.py` | The wind, including the time axis, the merge of a lower and an upper table and the absence of HWM14: the frame of the given components agrees with the one the initial velocity already uses, the identity that the aerodynamics under a wind `w` at velocity `v` equals the aerodynamics in calm air at `v - w`, that gravity and the rotation terms and the angular velocity do not see the wind, the downwind drift of a full re-entry and the terminal speed relative to the air, the columns written to `tecplot.dat`, and that the wind stays off in every configuration shipped with the code. For a table: the nodes are reproduced and the interpolation between them is linear, the row order does not matter, a one-node axis degenerates so that a vertical profile needs no separate path, longitudes are folded and a global table joins across the seam, the horizontal is clamped and the vertical follows `kind_extrapolation`, an incomplete or duplicated grid is rejected, a mismatched epoch is reported, and the shipped tables and the offline paths of the generator are read back. With a time axis: the nodes and the linear interpolation between them, the shift by the epoch of the run, the clamp outside the range, the refusal to guess when there is no epoch, and that each Runge-Kutta stage reads its own time — shown by one step over the whole window, where the effective wind of a ramp is half its end value. For the merge: the blend across the transition layer, the alignment of the horizontal nodes, and the refusal of tables on different axes. The paths that fetch NCEP and that call HWM14 are not exercised, since they need the network and a Fortran build |
+| `test_wind.py` | The wind, including the time axis, the merge of a lower and an upper table and the absence of HWM14: the frame of the given components agrees with the one the initial velocity already uses, the identity that the aerodynamics under a wind `w` at velocity `v` equals the aerodynamics in calm air at `v - w`, that gravity and the rotation terms and the angular velocity do not see the wind, the downwind drift of a full re-entry and the terminal speed relative to the air, the columns written to `tecplot.dat`, and that the wind stays off, and `velocity_factor` stays at 1.0, in every configuration shipped with the code. `velocity_factor` scales the constant wind and the table alike, 0.0 brings back the co-rotating atmosphere, and a factor which is not a single number stops the run. For a table: the nodes are reproduced and the interpolation between them is linear, the row order does not matter, a one-node axis degenerates so that a vertical profile needs no separate path, longitudes are folded and a global table joins across the seam, the horizontal is clamped and the vertical follows `kind_extrapolation`, an incomplete or duplicated grid is rejected, a mismatched epoch is reported, and the shipped tables and the offline paths of the generator are read back. With a time axis: the nodes and the linear interpolation between them, the shift by the epoch of the run, the clamp outside the range, the refusal to guess when there is no epoch, and that each Runge-Kutta stage reads its own time — shown by one step over the whole window, where the effective wind of a ramp is half its end value. For the merge: the blend across the transition layer, the alignment of the horizontal nodes, and the refusal of tables on different axes. The paths that fetch NCEP and that call HWM14 are not exercised, since they need the network and a Fortran build |
 
 `test/smoke_tutorial.py` is separate from the suite above: it runs the tutorial
 case end to end in a temporary directory and inspects the three output files, then
@@ -835,6 +1030,21 @@ and `VelairAbs[m/s]`. The ground-relative velocity `Upl/Vpl/Wpl` and its magnitu
 is a function of the position alone, so it is not stored during the run and is looked up
 again when the output is written, in the same way as the Euler angles and the aerodynamic
 angles.
+
+### Scaling the wind
+
+```yaml
+wind:
+  velocity_factor:
+    - 1.0
+```
+
+`velocity_factor` multiplies the whole wind field, whatever the model. It is written as a
+one-element list exactly as `initial_settings.density_factor` is, and for the same
+reason: that is what lets the Monte-Carlo driver scatter it, since the driver rewrites
+numbers in the control file and a wind **table** is chosen by its file name rather than by
+a number. The default of 1.0 is exact, so a configuration that leaves it alone gives the
+same result bit for bit as one without the key.
 
 ### Wind tables
 
