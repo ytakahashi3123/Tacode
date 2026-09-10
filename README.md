@@ -605,11 +605,13 @@ its **departure from the reference at the same time**, carried to where the refe
 now. A trail in absolute coordinates would be useless there — the vehicle covers some
 90 km between frames, so it would leave the window immediately — whereas a departure
 trail keeps the whole history of how the case came away, and its head is still the case's
-true position. The window widens as the cloud grows (`--window` fixes it), the ground
-comes into the frame once it is inside the window, and the bar in the corner is the scale,
-since the axes are switched off. Compared with `3d-relative`, the three directions are at
-the same scale and the ground is there; compared with `globe`, the Earth is not what the
-frame is spent on.
+true position. The window is the larger of what the dispersion needs and `--ground` times
+the altitude of the reference, so the surface is in the frame from the first breath of the
+entry, the window closes in as the vehicle comes down, and it opens again as the scatter
+grows (`--window` fixes it instead). The half width is written in the state box, since the
+axes are switched off, and `--scale-bar` adds a bar with ticks and its length beside it.
+Compared with `3d-relative`, the three directions are at the same scale and the ground is
+there; compared with `globe`, the Earth is not what the frame is spent on.
 
 The output format follows the extension of `-o` (`.mp4`, `.gif`, or a self-contained
 `.html`), and `--snapshot -1` writes the last frame as a single image instead — the

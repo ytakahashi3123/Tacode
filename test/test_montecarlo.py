@@ -910,7 +910,8 @@ class TestTheDispersionAnimation(unittest.TestCase):
         position_reference = np.array([[7000.0, 0.0, 0.0], [7000.0, 0.0, 0.0]])
         position = np.array([[[7000.0, 10.0, 0.0], [7000.0, 30.0, 0.0]],
                              [[7000.0, 10.0, 0.0], [7000.0, 30.0, 0.0]]])
-        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 0.0)
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference,
+                                                              np.zeros(len(position_reference)))
 
         np.testing.assert_allclose(centre[0], [7000.0, 5.0, 0.0])
         np.testing.assert_allclose(centre[1], [7000.0, 15.0, 0.0])
@@ -922,7 +923,8 @@ class TestTheDispersionAnimation(unittest.TestCase):
         # 最遠のケースの距離を超えられない（この性質に頼っている）
         position_reference = np.array([[7000.0, 0.0, 0.0]])
         position = np.array([[[7000.0, 12.0, 3.0]], [[7000.0, -4.0, -9.0]]])
-        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 0.0)
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference,
+                                                              np.zeros(len(position_reference)))
 
         for point in (position[0, 0], position[1, 0], position_reference[0]):
             self.assertLessEqual(float(np.linalg.norm(point - centre[0])), float(half[0]) + 1.e-9)
@@ -933,8 +935,8 @@ class TestTheDispersionAnimation(unittest.TestCase):
         for _ in range(0, 200):
             position_reference = generator.normal(scale=50.0, size=(1, 3))
             position = generator.normal(scale=50.0, size=(generator.integers(1, 8), 1, 3))
-            centre, half = montecarlo_animation.get_follow_window(position, position_reference,
-                                                                  0.0)
+            centre, half = montecarlo_animation.get_follow_window(
+                position, position_reference, np.zeros(len(position_reference)))
             self.assertLessEqual(float(np.linalg.norm(position_reference[0] - centre[0])),
                                  float(half[0]) + 1.e-9)
 
@@ -942,7 +944,8 @@ class TestTheDispersionAnimation(unittest.TestCase):
         # 散らばりが一時的に縮むたびに寄っては引いてを繰り返すと、何が動いているのか読めない
         position_reference = np.zeros((3, 3))
         position = np.array([[[0.0, 40.0, 0.0], [0.0, 4.0, 0.0], [0.0, 8.0, 0.0]]])
-        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 0.0)
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference,
+                                                              np.zeros(len(position_reference)))
 
         self.assertTrue(np.all(np.diff(half) >= 0.0))
 
@@ -950,11 +953,69 @@ class TestTheDispersionAnimation(unittest.TestCase):
         # 突入直後は散らばりが 0 なので、下限が無いと窓が潰れる
         position_reference = np.zeros((2, 3))
         position = np.zeros((3, 2, 3))
-        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 0.0)
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference,
+                                                              np.zeros(len(position_reference)))
         np.testing.assert_allclose(half, montecarlo_animation.WINDOW_FOLLOW_MINIMUM)
 
-        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 12.5)
+        centre, half = montecarlo_animation.get_follow_window(
+            position, position_reference, np.zeros(len(position_reference)), 12.5)
         np.testing.assert_allclose(half, 12.5)
+
+    def test_the_window_keeps_the_ground_in_sight(self):
+        # 散らばりだけで決めると、突入直後は窓が数 km なのに地表は 150 km 下にあり、
+        # 何も無い空間に点が 1 つという絵になる
+        position_reference = np.array([[6378.137 + 150.0, 0.0, 0.0],
+                                       [6378.137 + 10.0, 0.0, 0.0]])
+        altitude_reference = np.array([150.0, 10.0])
+        position = position_reference[np.newaxis, :, :].copy()
+
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference,
+                                                              altitude_reference,
+                                                              0.0, 1.15)
+        # 地表（高度 0）が窓の中にあること
+        self.assertGreaterEqual(float(half[0]), 150.0)
+        self.assertGreaterEqual(float(half[1]), 10.0)
+        # 高度に追わせているので、降りるにつれて窓は閉じる
+        self.assertLess(float(half[1]), float(half[0]))
+
+        # 0 を与えると地表は考えない（散らばりだけ）
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference,
+                                                              altitude_reference, 0.0, 0.0)
+        self.assertLess(float(half[0]), 150.0)
+
+    def test_a_fixed_window_ignores_the_ground_and_the_dispersion(self):
+        position_reference = np.array([[6378.137 + 150.0, 0.0, 0.0]])
+        position = np.array([[[6378.137 + 150.0, 40.0, 0.0]]])
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference,
+                                                              np.array([150.0]), 8.0, 1.15)
+        np.testing.assert_allclose(half, 8.0)
+
+    def test_the_scale_bar_carries_ticks_at_both_ends(self):
+        # 目盛りが無いと、ただの線が何を意味するのか分からない
+        origin = np.zeros(3)
+        unit_along = np.array([1.0, 0.0, 0.0])
+        unit_up = np.array([0.0, 0.0, 1.0])
+        bar = montecarlo_animation.get_scale_bar(origin, 10.0, unit_along, unit_up,
+                                                 ratio_tick=0.1)
+
+        # NaN で 3 つの区間に切れていること（目盛り・本体・目盛り）
+        self.assertEqual(int(np.count_nonzero(np.isnan(bar[:, 0]))), 2)
+        finite = bar[np.isfinite(bar[:, 0])]
+        # 本体は長さ 10 km、目盛りは上下に 1 km
+        self.assertAlmostEqual(float(np.max(finite[:, 0]) - np.min(finite[:, 0])), 10.0, places=9)
+        self.assertAlmostEqual(float(np.max(finite[:, 2]) - np.min(finite[:, 2])), 2.0, places=9)
+
+    @unittest.skipUnless(HAS_MATPLOTLIB, 'matplotlib is not installed')
+    def test_the_follow_view_draws_a_scale_bar_when_it_is_asked_for(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             tempfile.TemporaryDirectory() as directory_reference:
+            reference = self.build_run(directory, directory_reference)
+            output = os.path.join(directory, 'follow_bar.png')
+            completed = self.run_script([directory, '--reference', reference,
+                                         '--view', 'follow', '--scale-bar',
+                                         '--snapshot', '-1', '--dpi', '50', '-o', output])
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertGreater(os.path.getsize(output), 1000)
 
     def test_a_point_outside_the_window_is_dropped(self):
         # matplotlib の 3 次元は線を箱で切ってくれないので、外れる点は NaN にして落とす

@@ -129,6 +129,14 @@ def argument():
   parser.add_argument('--window', type=float, default=0.0,
                       help='half width of the follow window, km. 0 (the default) widens it '
                            'with the dispersion itself; a value keeps it fixed')
+  parser.add_argument('--ground', type=float, default=1.15,
+                      help='keep the ground inside the follow window: the half width is at '
+                           'least this factor times the altitude of the reference, so the '
+                           'surface is in the frame from the first breath of the entry. '
+                           '0 leaves the window to the dispersion alone')
+  parser.add_argument('--scale-bar', action='store_true',
+                      help='draw a scale bar with ticks in the follow view. The window is '
+                           'written in the state box in any case')
   parser.add_argument('--exaggerate', type=float, default=1.0,
                       help='stretch the altitude by this factor in the globe view, so that '
                            'a 150 km descent is visible against a 6378 km radius '
@@ -252,32 +260,40 @@ def normalize_longitude(longitude):
   return (longitude + 180.0) % 360.0 - 180.0
 
 
-def get_follow_window(position, position_reference, window_fixed):
+def get_follow_window(position, position_reference, altitude_reference,
+                      window_fixed=0.0, factor_ground=0.0):
   #
   # 追従カメラの窓（中心と半幅 [km]）をフレームごとに返す。
   #
   # 中心は基準ケースとケース群の重心の中点に置く。基準ケースにぴったり載せると、
   # ケースは風で片側（風下）に寄るので窓の半分が空くことになる。
   #
-  # 半幅は、その中心からいちばん離れているケースまでの距離に余白を掛けたもの。
-  # --window を与えればそれで固定する。基準ケースは別に見なくてよい:
-  # 中心が中点なので基準ケースの距離は |重心 - 基準|/2 であり、これは
-  # 最遠のケースの距離を超えられない（重心のずれは各ケースのずれの平均だから）。
+  # 半幅は 2 つの要求の大きいほうを取る:
   #
-  # **狭める方向には動かさない**（累積の最大を取る）。散らばりが一時的に縮むたびに
-  # 寄っては引いてを繰り返すと、何が動いているのか読めなくなるため。
+  #   1. 散らばり — 中心からいちばん離れているケースまでの距離に余白を掛けたもの。
+  #      基準ケースは別に見なくてよい: 中心が中点なので基準ケースの距離は
+  #      |重心 - 基準|/2 であり、最遠のケースの距離を超えられない（重心のずれは
+  #      各ケースのずれの平均だから）。**狭める方向には動かさない**（累積の最大）。
+  #      散らばりが一時的に縮むたびに寄っては引いてを繰り返すと読めなくなる
+  #   2. 地表 — 基準ケースの高度の factor_ground 倍。散らばりだけで決めると、
+  #      突入直後は窓が数 km なのに地表は 150 km 下にあり、**何も無い空間に点が
+  #      1 つ**という絵になる。高度に追わせておけば、地表が最初から入り、
+  #      降りるにつれて窓が閉じ、そのあと散らばりで開いていく
+  #
+  # --window を与えれば両方を無視して固定する。
   #
   centre = 0.5*( position_reference + np.mean(position, axis=0) )
 
-  distance = np.linalg.norm(position - centre[np.newaxis, :, :], axis=2)
-  half     = MARGIN_FOLLOW*np.max(distance, axis=0)
-
   if window_fixed > 0.0 :
-    half = np.full(position_reference.shape[0], window_fixed)
-  else :
-    half = np.maximum( np.maximum.accumulate(half), WINDOW_FOLLOW_MINIMUM )
+    return centre, np.full(position_reference.shape[0], window_fixed)
 
-  return centre, half
+  distance = np.linalg.norm(position - centre[np.newaxis, :, :], axis=2)
+  half     = np.maximum.accumulate( MARGIN_FOLLOW*np.max(distance, axis=0) )
+
+  if factor_ground > 0.0 :
+    half = np.maximum( half, factor_ground*np.asarray(altitude_reference, dtype=float) )
+
+  return centre, np.maximum(half, WINDOW_FOLLOW_MINIMUM)
 
 
 def get_scale_length(half_width):
@@ -296,6 +312,20 @@ def get_scale_length(half_width):
       return length
 
   return 10.0**exponent
+
+
+def get_scale_bar(origin, length, unit_along, unit_up, ratio_tick=0.05):
+  #
+  # ものさしの折れ線を返す。両端に目盛りを立て、間を NaN で切って 1 本の線にする
+  # （3 次元の線は NaN のところで途切れる。artist を増やさないため）。
+  #
+  tick = ratio_tick*length*unit_up
+  end  = origin + length*unit_along
+  gap  = np.full(3, np.nan)
+
+  return np.stack([origin + tick, origin - tick, gap,
+                   origin, end, gap,
+                   end + tick, end - tick])
 
 
 def clip_to_window(line, centre, half):
@@ -417,7 +447,8 @@ def main():
   # 追従窓の中心と半幅（follow のときだけ使う）
   centre_window = half_window = None
   if flag_follow :
-    centre_window, half_window = get_follow_window(position, position_reference, args.window)
+    centre_window, half_window = get_follow_window(position, position_reference,
+                                                   altitude_reference, args.window, args.ground)
 
   # カメラ
   # --globe: 既定で軌道の真上に置く（そうしないと地球の裏側を飛ぶことになる）
@@ -650,8 +681,12 @@ def main():
       # 地表は窓に入ったときだけ、現在位置のまわりに作り直す
       ground_follow = {'surface': None, 'graticule': None}
 
-      # ものさし。軸目盛りを切っているので、長さはこの 1 本と状態表示で読む
-      line_scale, = ax_box.plot([], [], [], color='black', linewidth=2.4, zorder=6)
+      # ものさし（--scale-bar）。軸目盛りを切っているので、頼まれたらこれで示す。
+      # 目盛りと数字を付けないと、ただの線が何を意味するのか分からない
+      line_scale = None
+      text_scale = {'artist': None}
+      if args.scale_bar :
+        line_scale, = ax_box.plot([], [], [], color='black', linewidth=1.8, zorder=6)
 
       # 平行投影にする。透視投影だと窓の中の同じ距離が奥と手前で違って見えるので、
       # 散らばりを読むのに向かない。zoom は箱を画面いっぱいに寄せるため
@@ -659,7 +694,7 @@ def main():
       ax_box.set_box_aspect((1.0, 1.0, 1.0), zoom=2.2)
       ax_box.set_axis_off()
       ax_box.set_title('Departure from the reference, in ECEF axes\n'
-                       '(the camera follows the reference; the bar is the scale)',
+                       '(the camera follows the reference; the window is in the box)',
                        fontsize=10)
 
     elif flag_globe :
@@ -902,17 +937,29 @@ def main():
           if ground_follow[key] is not None :
             ground_follow[key].remove()
             ground_follow[key] = None
-        # ものさしは窓の下手前に置く（雲と重ならない場所）。
-        # 窓は立方体なので、中心からの**距離**が半幅を超えると窓の外に出る
-        # （下へ 0.8、南へ 0.8 と取ると距離は 1.13 倍になり、実際に消えていた）。
-        # 下へ 0.5・南へ 0.5、長さは半幅の 0.6 までに収めると距離は 0.77 倍で収まる
-        length_scale = get_scale_length(0.6*half_follow)
-        origin_scale = (centre_follow - 0.50*half_follow*unit_up_follow
-                        - 0.50*half_follow*unit_north_follow
-                        - 0.5*length_scale*unit_east_follow)
-        line = np.stack([origin_scale, origin_scale + length_scale*unit_east_follow])
-        line_scale.set_data(line[:, 0], line[:, 1])
-        line_scale.set_3d_properties(line[:, 2])
+        if line_scale is not None :
+          # ものさしは窓の下手前に置く（雲と重ならない場所）。
+          # 窓は立方体なので、中心からの**距離**が半幅を超えると窓の外に出る
+          # （下へ 0.8、南へ 0.8 と取ると距離は 1.13 倍になり、実際に消えていた）。
+          # 下へ 0.5・南へ 0.5、長さは半幅の 0.6 までに収めると距離は 0.77 倍で収まる
+          length_scale = get_scale_length(0.6*half_follow)
+          origin_scale = (centre_follow - 0.50*half_follow*unit_up_follow
+                          - 0.50*half_follow*unit_north_follow
+                          - 0.5*length_scale*unit_east_follow)
+          line = get_scale_bar(origin_scale, length_scale,
+                               unit_east_follow, unit_up_follow)
+          line_scale.set_data(line[:, 0], line[:, 1])
+          line_scale.set_3d_properties(line[:, 2])
+
+          # 数字は毎フレーム作り直す（Text3D の位置更新は matplotlib の版に依るため）
+          if text_scale['artist'] is not None :
+            text_scale['artist'].remove()
+          label = origin_scale + 0.5*length_scale*unit_east_follow \
+                  - 0.11*length_scale*unit_up_follow
+          text_scale['artist'] = ax_box.text(label[0], label[1], label[2],
+                                             '{:g} km'.format(length_scale),
+                                             color='black', fontsize=9, zorder=6,
+                                             ha='center', va='top')
 
         if np.linalg.norm(centre_follow) - half_follow < RADIUS_PLANET :
           # 経緯線の間隔は窓の大きさに合わせる（数十 km の窓に 10 度刻みでは 1 本も入らない）
@@ -1003,8 +1050,8 @@ def main():
                        radius))
     if flag_follow :
       # 追従窓は毎フレーム広がるので、いまの縮尺を書いておく
-      message = message + '\nwindow +-{:5.2f} km   bar {:g} km'.format(
-                            float(half_window[index]), get_scale_length(0.6*float(half_window[index])))
+      # 縮尺は窓の半幅で示す（軸目盛りを切っているので、これが唯一の数字になる）
+      message = message + '\nwindow +-{:6.2f} km'.format(float(half_window[index]))
     text_state.set_text(message)
 
     return []

@@ -59,7 +59,9 @@ montecarlo_animation:
   #   view: follow
   #   output: montecarlo_dispersion_follow.mp4
   #   spin: 0.0
-  #   window: 0.0        # 0 widens the window with the dispersion; a value fixes it, km
+  #   window: 0.0        # 0 takes the window from the dispersion and the altitude; km fixes it
+  #   ground: 1.15       # keep the ground in the window (times the altitude); 0 turns it off
+  #   scale_bar: False   # True draws a scale bar with ticks in the corner
   
   #view: flat
   #output: montecarlo_dispersion.mp4

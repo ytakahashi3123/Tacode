@@ -51,7 +51,7 @@ case at the same time, which is what shows the dispersion growing.
 | Trajectories (`3d`, left) | the paths themselves, in a box of **longitude, latitude and altitude** — the absolute trajectory, not a difference. The dispersion ellipses lie on the floor at the impact point, and a grey shadow follows each case. At this scale the 100 cases lie on one another, so they are drawn as a single bundle |
 | Trajectories (`3d-relative`, left) | the same box, but measured **from the reference case at the same time**, in east and north from it. This is the one that shows the bundle coming down tight and unravelling into the ellipse; the cases are coloured by their wind |
 | Trajectories in ECEF (`globe`, left) | the **absolute** trajectories, in ECEF, drawn with the Earth and a graticule every 30 deg. The 100 cases lie within tens of kilometres of each other against a radius of 6378 km, so they are drawn as one bundle in a single colour; the dispersion ellipses are placed on the tangent plane at the impact point, where they are the size of a dot. `--exaggerate` stretches the altitude about the surface (a 150 km descent is 2 % of the radius), and the camera looks at the middle of the track unless `--azimuth` and `--elevation` say otherwise |
-| Trajectories (`follow`, left) | the same ECEF axes as `globe`, but with the **camera following the reference case**: the window is a cube around it, so the tens of kilometres of dispersion are not lost against a radius of 6378 km. What is drawn inside it is each case's **departure from the reference at the same time**, carried to the reference's current position — in one frame the vehicle covers some 90 km, so an absolute trail would leave the window at once, while a departure trail keeps the whole history of how the case came away, and its head is the case's true position. The window widens with the dispersion (`--window` fixes it), the cases are coloured by their wind, the ellipses lie on the tangent plane at the reference, the ground appears once it is inside the window, and the bar is the scale, since the axes are switched off. Unlike `3d-relative` the three directions are at the same scale and the ground is there |
+| Trajectories (`follow`, left) | the same ECEF axes as `globe`, but with the **camera following the reference case**: the window is a cube around it, so the tens of kilometres of dispersion are not lost against a radius of 6378 km. What is drawn inside it is each case's **departure from the reference at the same time**, carried to the reference's current position — in one frame the vehicle covers some 90 km, so an absolute trail would leave the window at once, while a departure trail keeps the whole history of how the case came away, and its head is the case's true position. The window is the larger of what the dispersion needs and `--ground` times the altitude, so the **surface is in the frame from the start** and the window closes in as the vehicle descends before opening again with the scatter (`--window` fixes it, `--ground 0` leaves it to the dispersion alone). The cases are coloured by their wind, the ellipses lie on the tangent plane at the reference, and the half width is written in the state box, since the axes are switched off; `--scale-bar` adds a bar with ticks and its length beside it. Unlike `3d-relative` the three directions are at the same scale and the ground is there |
 | Altitude and dispersion (lower) | the altitude against time in grey, and on the right-hand axis the 1 sigma spread of the cases, east and north. This is where the wind is read off: the spread grows only while the vehicle is in the air the wind is blowing |
 | Dispersion | each case as a point, with the path it has taken, measured **from the reference case at the same time** in the local horizon (east, north, km). The 1, 2 and 3 sigma covariance ellipses and the CEP 50 % circle are redrawn every frame, so the cloud is seen growing from a point into the final ellipse |
 
@@ -116,7 +116,9 @@ another name to compare).
 | `--fps` | frames per second (default 20) |
 | `--tail` | length of the trail behind each case in seconds; 0 (the default) keeps the whole path |
 | `--view` | `flat` (default), `3d`, `3d-relative`, `globe` or `follow` |
-| `--window` | half width of the `follow` window, km; 0 (the default) widens it with the dispersion itself |
+| `--window` | half width of the `follow` window, km; 0 (the default) takes it from the dispersion and `--ground` |
+| `--ground` | keep the ground in the `follow` window: the half width is at least this factor times the altitude of the reference (1.15; 0 turns it off) |
+| `--scale-bar` | draw a scale bar with ticks and its length in the `follow` view (off by default; the window is in the state box in any case) |
 | `--exaggerate` | stretch the altitude by this factor in the globe view (1.0, the default, is the true scale) |
 | `--altitude-max` | upper limit of the altitude axis of the 3D view, km; 0 (default) covers the whole descent |
 | `--elevation`, `--azimuth` | camera of the 3D view at the first frame, deg. Left out, the box uses 20 and -62, and the globe looks at the middle of the track. In `follow` the elevation is 20 and `--azimuth` is the offset from the longitude being tracked (-55) |
@@ -146,6 +148,9 @@ another name to compare).
 - The follow window is a **cube**, so a point is inside it only while its distance from
   the centre is below the half width; the scale bar is placed with that in mind (it was
   disappearing when it was put at 0.8 of the half width in two directions at once).
+- The ground of the follow view is a patch of the sphere with a graticule, the same one
+  `animate_trajectory` draws, redrawn around the reference every frame. There is no
+  coastline or map on it.
 - A single case can also be animated in three dimensions over the globe, with its
   attitude, by `../animate_trajectory/`; this tool is for what the cases do *relative to
   each other*.
