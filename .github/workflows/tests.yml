@@ -74,6 +74,24 @@ jobs:
           ./run_tacode.sh
           tail -5 log_tacode
 
+      - name: Run the entry through a real wind table
+        env:
+          TACODE_PYTHON: python
+        run: |
+          cd tutorial/work_reentry_wind_table
+          ./run_tacode.sh
+          tail -3 log_tacode
+
+      - name: Run the wind Monte-Carlo tutorial and summarise it
+        env:
+          TACODE_PYTHON: python
+        run: |
+          cd tutorial/work_montecarlo_wind
+          ./run_tacode-mc.sh
+          python ../../src_helper/montecarlo_dispersion/montecarlo_dispersion.py \
+            work_montecarlo_wind --reference ../work_reentry/output_result/tecplot.dat \
+            --mark "NCEP+HWM14 table=../work_reentry_wind_table/output_result/tecplot.dat"
+
       - name: A bad configuration must fail with a non-zero exit code
         env:
           TACODE_PYTHON: python

@@ -1,0 +1,227 @@
+
+computational_setup:
+  # Flag for initial or restart calculation
+  # --True: initial condition, False: restart
+  flag_initial: True
+
+  # Maximum time step, s
+  time_elapsed_maximum: 15000.0
+
+
+satellite: 
+  # Mass, kg
+  mass: 10.0
+  # Characteristic area, m^2
+  characteristic_area: 0.78540
+  # Characteristic length, m
+  characteristic_length: 0.5
+
+  # Aerodynamic model
+  # --constant, or fileread
+  kind_aerodynamic_model: fileread
+
+  # Drag coefficient (aerodynamic_model: constant)
+  drag_coefficient: 1.0
+
+  # Drag coefficient (aerodynamic model: fileinput)
+  # --manual: directory_aerodynamic below, relative to the current directory
+  # --default (or auto): <repo>/database/aerodynamic, resolved from the location
+  #   of the source file, independent of the current directory
+  directory_path_specify: manual # default or manual
+  directory_aerodynamic: database/aerodynamic
+  filename_aerodynamic: aerodynamic.txt
+
+initial_settings:
+  # Initial conditions 
+  # Initial coordinate, 1:Long.(deg) 2: Lat.(deg), 3:Alt.(km)
+  coordinate:
+    - 141.5
+    - 42.5
+    - 150.0
+  velocity:
+    - 7450
+    - 0
+    - 0
+  density_factor:
+    - 1.0
+
+
+planet:
+  # Gravitational constant, M.m2/kg2
+  gravitational_constant: 6.67408e-11
+  # Planet mass (Earth), kg
+  mass: 5.9723662e+24
+  # Planet radius on Equator, m
+  radius: 6.3781370e+6 
+  # Ellipticity 
+  ellipticity: 3.35281066474e-3
+  # Rotation rate, rad/s
+  rotation_rate: 7.292115e-5
+  # Dynamic form factor (J2) for potential calculation
+  potential_factor:
+    J2: 1.082629e-3
+    J22: -1.81222e-6
+    J3: -2.5356e-6 
+    J4: -1.62336e-6
+    Lambda22: -14.545   # Degree
+    
+
+epoch:
+  # Absolute time of the initial condition (UTC)
+  # --The solver itself needs only the elapsed time; the epoch is required by the
+  #   models that depend on the date: the wind (the NCEP time axis, the day of year
+  #   and the universal time HWM14 takes) and, later, the lunar and solar ephemeris.
+  # --False (default): no absolute time. The outputs are then exactly as before.
+  flag_epoch: False
+
+  # UTC in ISO 8601. Quote it so that it stays a string; an unquoted timestamp is
+  # accepted as well. A missing time zone is taken as UTC.
+  # --Leap seconds are not modelled; UTC is treated as a uniform time scale.
+  datetime: '2026-03-21T03:00:00Z'
+
+
+atmosphere:
+  # Atmosphere model
+  # --constant, or fileread
+  kind_atmosphere_model: fileread
+
+  # Atmosphere model: constant settings
+  # Densitry, kg/m3
+  density: 1.e-3
+  # Temperature, K
+  temperature: 300.0
+
+  # Atmosphere model: file input
+  # --Path resolution is the same as satellite.directory_path_specify
+  directory_path_specify: manual # default or manual
+  directory_atmosphere: database/atmosphere
+  filename_atmosphere: atmospheremodel.txt
+
+  
+wind:
+  # Wind
+  # --The aerodynamics is evaluated with the air-relative velocity
+  #     v_air = v_ecef - v_wind
+  #   which affects the drag, the 6-DOF force and moment, the dynamic pressure and
+  #   the angle of attack. Gravity, the Coriolis and the centrifugal terms keep using
+  #   the ECEF velocity, and the angular velocity is untouched: the wind translates
+  #   the air, it does not rotate it.
+  # --False (default): the atmosphere co-rotates with the Earth, exactly as before.
+  flag_wind: True
+
+  # Wind model
+  # --constant: one uniform wind everywhere
+  # --fileread: interpolate a table of longitude x latitude x altitude
+  kind_wind_model: constant
+
+  # Wind model: constant settings
+  # --[East, North, Up] in the local geocentric horizon, m/s. This is the frame the
+  #   initial velocity already uses, so the two are given the same way. It is
+  #   geocentric, not geodetic; see the note in README.md.
+  # --This is the nominal wind of the Monte-Carlo tutorial. tacode-montecarlo.py
+  #   overwrites these three lines case by case, multiplying each component by
+  #   (1 + dispersion*(U - 0.5)) with U uniform in [0, 1). The dispersion is
+  #   relative, so a component left at 0.0 stays 0.0 in every case.
+  #   The nominal values are read from the Monte-Carlo control file, not from
+  #   here; keep the two in step. See the Monte-Carlo section of README.md.
+  velocity:
+    - 20.0
+    - 10.0
+    - 0.0
+
+  # Wind model: file input
+  # --Path resolution is the same as satellite.directory_path_specify
+  directory_path_specify: manual # default or manual
+  directory_wind: database/wind
+  filename_wind: windmodel.txt
+
+  # Treatment outside the altitude range of the table
+  # --zero (default): no wind there, that is, the atmosphere co-rotates with the Earth
+  #   as it does without this section. NCEP reaches only 31-48 km, so clamping its top
+  #   value upwards would stretch the stratospheric jet into the thermosphere.
+  # --clamp: use the value at the end of the table.
+  # The horizontal directions are always clamped to the edge of the region.
+  kind_extrapolation: zero
+
+  # Scale factor applied to the wind, whatever the model (1.0 = the wind as given)
+  # --Written as a one-element list because the Monte-Carlo routine perturbs it
+  #   element by element. This is how a wind TABLE is scattered: the driver
+  #   rewrites numbers in the control file, and a table is chosen by its file name.
+  # --1.0 leaves the result bit for bit as it is without this key.
+  velocity_factor:
+    - 1.0
+
+
+time_integration:
+  # Time integration settings
+
+  # Time marching scheme: 
+  # --"explicit_euler", "implicit_lusgs"
+  kind_time_scheme: runge_kutta
+  #kind_time_scheme: explicit_euler
+
+  # constant timestep (s) for innerr loop in usteady computation
+  # valid when kind_time_determine: dt
+  timestep_constant: 1.0
+
+  # Temporal accuracy using LUSGS unsteady simulation
+  # --2nd_backward_diff or 1st_backward_diff
+  kind_backward_difference: 2nd_backward_diff
+  #kind_backward_difference: 1st_backward_diff
+
+
+restart_process:
+
+  # Output directory
+  directory_output: output_restart
+
+  # Time series
+  # --True: stored individually as time series, False: stored by overwriting
+  flag_time_series: False
+
+  # Digid for step
+  # --for example, restart_0012.dat will be stored if using digid_step: 4
+  digid_step: 4
+
+  # Restart step for reading
+  restart_step: 500
+
+  # Restart file name (output)
+  file_restart: restart.dat
+
+  # Output frequency
+  frequency_output: 1
+
+
+post_process:
+  # Output directory
+  directory_output: output_result
+
+  # Output (GPX)
+  flag_output_gpx: True
+  filename_output_gpx: geodetic.gpx
+
+  # Output (KML)
+  kml:
+    flag_output: True
+    # File name
+    filename_output: geodetic.kml
+    # --kml parameters
+    linestyle_color: simplekml.Color.white
+    linestyle_width: 4
+    extrude: 1
+    # --Output frequency
+    frequency_output: 10
+
+  # Output (Tecplot)  
+  tecplot:
+    flag_output: True
+    # File name
+    filename_output: tecplot.dat
+    # --Output frequency
+    frequency_output: 1
+
+  # Output (VTK)  
+  flag_output_vtk: False
+  filename_output_vtk: output.vtk
+

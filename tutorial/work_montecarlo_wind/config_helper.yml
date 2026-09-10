@@ -1,0 +1,66 @@
+# Settings for the post-processing tools in src_helper/
+#
+# --Read from the current directory, so the tools can be run with no arguments at all:
+#     python3 ../../src_helper/montecarlo_dispersion/montecarlo_dispersion.py
+#     python3 ../../src_helper/montecarlo_animation/montecarlo_animation.py
+# --One section per tool; the keys are the long options without the dashes
+#   (--altitude-max becomes altitude_max). An unknown key stops the run.
+# --The command line overrides what is written here, and -file points at another file.
+# --"--save-config" writes the settings in effect back out; the comments are lost, so
+#   keep the handwritten file and save to a different name if you want to compare.
+# --Paths are relative to the current directory, as everywhere else in Tacode.
+
+montecarlo_dispersion:
+  # The working directory the Monte-Carlo driver created (montecarlo.work_dir)
+  directory: work_montecarlo_wind
+
+  # Measure the offsets from the same entry WITHOUT wind, so that the mean offset is
+  # the effect of the nominal wind and the spread is what the +-50 % on it costs
+  reference: ../work_reentry/output_result/tecplot.dat
+
+  # The same entry flown through the real wind table: drawn as a star, left out of
+  # the statistics
+  mark:
+    - NCEP+HWM14 table=../work_reentry_wind_table/output_result/tecplot.dat
+
+  output: dispersion.csv
+  plot: dispersion.png
+
+montecarlo_animation:
+  directory: work_montecarlo_wind
+  reference: ../work_reentry/output_result/tecplot.dat
+  mark:
+    - NCEP+HWM14 table=../work_reentry_wind_table/output_result/tecplot.dat
+
+  # flat       : ground track, altitude and the dispersion plane
+  # 3d         : the ABSOLUTE trajectories, in longitude, latitude and altitude
+  # 3d-relative: the same box, measured from the reference case at the same time.
+  #              This is the one that shows the dispersion growing
+  # globe      : the absolute trajectories in ECEF, drawn with the Earth
+  #
+  #   view: 3d
+  #   output: montecarlo_dispersion_3d.mp4
+  #   spin: 0.0          # 0 keeps the camera still; 35 turns it while it plays
+  #
+  #   view: 3d-relative
+  #   output: montecarlo_dispersion_relative.mp4
+  #   spin: 0.0
+  #   altitude_max: 0.0  # 40.0 cuts the box down to the terminal descent
+  #
+  #   view: globe
+  #   output: montecarlo_dispersion_globe.mp4
+  #   spin: 0.0
+  #   exaggerate: 1.0    # stretch the altitude about the surface (150 km is 2 % of R)
+  #   # elevation / azimuth: left out, the camera looks at the middle of the track
+  
+  #view: flat
+  #output: montecarlo_dispersion.mp4
+  
+  view: 3d-relative
+  output: montecarlo_dispersion_3d.mp4
+  spin: 0.0          # 0 keeps the camera still; 35 turns it while it plays
+  altitude_max: 40.0  # 40.0 cuts the box down to the terminal descent
+
+  frames: 180
+  fps: 20
+  dpi: 110
