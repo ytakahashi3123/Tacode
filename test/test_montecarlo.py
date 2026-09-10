@@ -881,6 +881,100 @@ class TestTheDispersionAnimation(unittest.TestCase):
             self.assertGreater(os.path.getsize(output), 1000)
 
     @unittest.skipUnless(HAS_MATPLOTLIB, 'matplotlib is not installed')
+    def test_the_follow_view_is_drawn(self):
+        # --view follow はカメラが基準ケースを追い、窓の中に「基準からのずれ」を描く
+        with tempfile.TemporaryDirectory() as directory, \
+             tempfile.TemporaryDirectory() as directory_reference:
+            reference = self.build_run(directory, directory_reference)
+            output = os.path.join(directory, 'follow.png')
+            completed = self.run_script([directory, '--reference', reference,
+                                         '--view', 'follow', '--snapshot', '-1',
+                                         '--dpi', '50', '-o', output])
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertGreater(os.path.getsize(output), 1000)
+
+    @unittest.skipUnless(HAS_MATPLOTLIB, 'matplotlib is not installed')
+    def test_the_follow_view_takes_a_fixed_window(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             tempfile.TemporaryDirectory() as directory_reference:
+            reference = self.build_run(directory, directory_reference)
+            output = os.path.join(directory, 'follow_fixed.png')
+            completed = self.run_script([directory, '--reference', reference,
+                                         '--view', 'follow', '--window', '25',
+                                         '--snapshot', '-1', '--dpi', '50', '-o', output])
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertGreater(os.path.getsize(output), 1000)
+
+    def test_the_follow_window_is_centred_between_the_reference_and_the_cases(self):
+        # 基準ケースに窓を載せると、風下に寄ったケース群で窓の半分が空く
+        position_reference = np.array([[7000.0, 0.0, 0.0], [7000.0, 0.0, 0.0]])
+        position = np.array([[[7000.0, 10.0, 0.0], [7000.0, 30.0, 0.0]],
+                             [[7000.0, 10.0, 0.0], [7000.0, 30.0, 0.0]]])
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 0.0)
+
+        np.testing.assert_allclose(centre[0], [7000.0, 5.0, 0.0])
+        np.testing.assert_allclose(centre[1], [7000.0, 15.0, 0.0])
+        # 半幅は中心からいちばん遠い点（この場合はケースと基準が同距離）に余白を掛けたもの
+        self.assertAlmostEqual(half[1], montecarlo_animation.MARGIN_FOLLOW*15.0, places=9)
+
+    def test_the_follow_window_holds_every_case_and_the_reference(self):
+        # 基準ケースは別に見ていない。中心が中点なので、基準ケースの距離は
+        # 最遠のケースの距離を超えられない（この性質に頼っている）
+        position_reference = np.array([[7000.0, 0.0, 0.0]])
+        position = np.array([[[7000.0, 12.0, 3.0]], [[7000.0, -4.0, -9.0]]])
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 0.0)
+
+        for point in (position[0, 0], position[1, 0], position_reference[0]):
+            self.assertLessEqual(float(np.linalg.norm(point - centre[0])), float(half[0]) + 1.e-9)
+
+    def test_the_reference_is_inside_the_window_whatever_the_cases(self):
+        # 上の性質を乱数で確かめる（成り立たなければ基準ケースが窓から出る）
+        generator = np.random.default_rng(20260911)
+        for _ in range(0, 200):
+            position_reference = generator.normal(scale=50.0, size=(1, 3))
+            position = generator.normal(scale=50.0, size=(generator.integers(1, 8), 1, 3))
+            centre, half = montecarlo_animation.get_follow_window(position, position_reference,
+                                                                  0.0)
+            self.assertLessEqual(float(np.linalg.norm(position_reference[0] - centre[0])),
+                                 float(half[0]) + 1.e-9)
+
+    def test_the_follow_window_never_narrows(self):
+        # 散らばりが一時的に縮むたびに寄っては引いてを繰り返すと、何が動いているのか読めない
+        position_reference = np.zeros((3, 3))
+        position = np.array([[[0.0, 40.0, 0.0], [0.0, 4.0, 0.0], [0.0, 8.0, 0.0]]])
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 0.0)
+
+        self.assertTrue(np.all(np.diff(half) >= 0.0))
+
+    def test_the_follow_window_has_a_floor_and_can_be_fixed(self):
+        # 突入直後は散らばりが 0 なので、下限が無いと窓が潰れる
+        position_reference = np.zeros((2, 3))
+        position = np.zeros((3, 2, 3))
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 0.0)
+        np.testing.assert_allclose(half, montecarlo_animation.WINDOW_FOLLOW_MINIMUM)
+
+        centre, half = montecarlo_animation.get_follow_window(position, position_reference, 12.5)
+        np.testing.assert_allclose(half, 12.5)
+
+    def test_a_point_outside_the_window_is_dropped(self):
+        # matplotlib の 3 次元は線を箱で切ってくれないので、外れる点は NaN にして落とす
+        centre = np.array([0.0, 0.0, 0.0])
+        line = np.array([[1.0, 0.0, 0.0], [0.0, 9.0, 0.0], [0.0, 0.0, -2.0]])
+        clipped = montecarlo_animation.clip_to_window(line, centre, 3.0)
+
+        self.assertFalse(np.any(np.isnan(clipped[0])))
+        self.assertTrue(np.all(np.isnan(clipped[1])))
+        self.assertFalse(np.any(np.isnan(clipped[2])))
+        # 元の配列は書き換えない（同じ軌跡を先頭の点にも使う）
+        self.assertFalse(np.any(np.isnan(line)))
+
+    def test_the_scale_bar_is_a_round_number_within_the_window(self):
+        for half, expected in ((0.6, 0.5), (2.0, 2.0), (7.0, 5.0), (30.0, 20.0), (99.0, 50.0)):
+            self.assertAlmostEqual(montecarlo_animation.get_scale_length(half), expected,
+                                   places=9)
+        self.assertEqual(montecarlo_animation.get_scale_length(0.0), 0.0)
+
+    @unittest.skipUnless(HAS_MATPLOTLIB, 'matplotlib is not installed')
     def test_the_planet_radius_agrees_with_the_other_tool(self):
         # 地球半径は animate_trajectory にもある。二重に持っている値なので、ずれたら困る
         sys.path.insert(0, os.path.join(ROOT_DIR, 'src_helper', 'animate_trajectory'))

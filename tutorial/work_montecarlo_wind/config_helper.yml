@@ -37,6 +37,9 @@ montecarlo_animation:
   # 3d-relative: the same box, measured from the reference case at the same time.
   #              This is the one that shows the dispersion growing
   # globe      : the absolute trajectories in ECEF, drawn with the Earth
+  # follow     : the same ECEF axes with the camera following the reference case, drawn
+  #              as each case's departure from it. The dispersion is not lost against
+  #              the size of the Earth, and the ground comes into the window at the end
   #
   #   view: 3d
   #   output: montecarlo_dispersion_3d.mp4
@@ -52,6 +55,11 @@ montecarlo_animation:
   #   spin: 0.0
   #   exaggerate: 1.0    # stretch the altitude about the surface (150 km is 2 % of R)
   #   # elevation / azimuth: left out, the camera looks at the middle of the track
+  #
+  #   view: follow
+  #   output: montecarlo_dispersion_follow.mp4
+  #   spin: 0.0
+  #   window: 0.0        # 0 widens the window with the dispersion; a value fixes it, km
   
   #view: flat
   #output: montecarlo_dispersion.mp4

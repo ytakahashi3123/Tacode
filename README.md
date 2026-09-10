@@ -598,6 +598,19 @@ of kilometres across against a descent of 150 km — and `--altitude-max` cuts i
 the part where the spread is built (40 km for the wind tutorial). `--spin 0` keeps the
 camera still in any of the three.
 
+`--view follow` keeps the ECEF axes of `globe` but **puts the camera on the reference
+case**: the window is a cube around it, which is what makes tens of kilometres of
+dispersion readable against a radius of 6378 km. Inside that window each case is drawn as
+its **departure from the reference at the same time**, carried to where the reference is
+now. A trail in absolute coordinates would be useless there — the vehicle covers some
+90 km between frames, so it would leave the window immediately — whereas a departure
+trail keeps the whole history of how the case came away, and its head is still the case's
+true position. The window widens as the cloud grows (`--window` fixes it), the ground
+comes into the frame once it is inside the window, and the bar in the corner is the scale,
+since the axes are switched off. Compared with `3d-relative`, the three directions are at
+the same scale and the ground is there; compared with `globe`, the Earth is not what the
+frame is spent on.
+
 The output format follows the extension of `-o` (`.mp4`, `.gif`, or a self-contained
 `.html`), and `--snapshot -1` writes the last frame as a single image instead — the
 figure to put in a report. `--mark` follows a run that is not part of the set, drawn as a

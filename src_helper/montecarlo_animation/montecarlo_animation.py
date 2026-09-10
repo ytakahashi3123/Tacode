@@ -25,6 +25,16 @@
 #   左（--view globe）— **ECEF の絶対座標**（X, Y, Z [km]）で地球ごと描く。地球半径
 #          6378 km に対して高度は 150 km なので、--exaggerate で高度だけ引き伸ばせる
 #          （1.0 が実寸）。分散円は着地点の接平面に置くので、この縮尺では点にしかならない
+#   左（--view follow）— **カメラが基準ケースを追いかける**。地球ごと入れると
+#          散らばり（数十 km）が地球半径（6378 km）に埋もれて読めないので、基準ケースの
+#          まわりの立方体だけを見る。ECEF の軸のまま、**各ケースの「基準ケースからのずれ」を
+#          いまの基準位置に運んで**描く（1 フレームで機体は 90 km 進むので、絶対座標の
+#          軌跡は 1 点を残して窓から出てしまう。ずれなら「どこで離れ始めたか」が残り、
+#          先頭は本当の現在位置と一致する）。窓は散らばりに合わせて広がる
+#          （--window で固定。縮む方向には動かさない）。地表は窓に入ったときだけ、
+#          現在位置のまわりを毎フレーム描き直す（animate_trajectory の追従カメラと同じ作り）。
+#          3d-relative との違いは、軸が東・北・高度ではなく ECEF のままで、
+#          縮尺が 3 方向とも等しく、地表が入ること
 #   左下 — 高度の履歴と、散らばり（1 sigma）の時間履歴
 #   右   — **基準ケースから見た散らばり**（東・北, km）。各ケースの現在位置を
 #          基準ケースの同時刻の位置から測り、共分散楕円（1/2/3 sigma）と CEP 50% を
@@ -75,6 +85,11 @@ COLOR_BUNDLE  = '#d95f02'
 # 散らばりの窓（km）に持たせる余白の割合
 MARGIN_WINDOW = 0.18
 
+# 追従カメラ（--view follow）の窓。散らばりの最大距離に掛ける余白と、
+# 窓の半幅の下限 [km]（散らばりが 0 の突入直後に窓が潰れないようにする）
+MARGIN_FOLLOW         = 1.25
+WINDOW_FOLLOW_MINIMUM = 2.0
+
 # 地球の赤道半径 [km]（描画用。animate_trajectory の同名の定数と同じ値。あちらは
 # 読み込むだけで matplotlib を要求するので、ここでは値だけ持つ。
 # 一致は test_montecarlo.py が検査する）
@@ -102,13 +117,18 @@ def argument():
                       help='path of the Tecplot output inside a case directory '
                            '(default: %(default)s)')
   parser.add_argument('--view', default='flat',
-                      choices=('flat', '3d', '3d-relative', 'globe'),
+                      choices=('flat', '3d', '3d-relative', 'globe', 'follow'),
                       help='flat (default): a ground track, the altitude and the dispersion '
                            'plane. 3d: the trajectories themselves in a box of longitude, '
                            'latitude and altitude. 3d-relative: the same box, but measured '
                            'from the reference case at the same time, which is what shows '
                            'the dispersion growing. globe: the trajectories in ECEF, drawn '
-                           'with the Earth')
+                           'with the Earth. follow: the same ECEF trajectories, but with the '
+                           'camera tracking the reference case, so that the dispersion is not '
+                           'lost against the size of the Earth')
+  parser.add_argument('--window', type=float, default=0.0,
+                      help='half width of the follow window, km. 0 (the default) widens it '
+                           'with the dispersion itself; a value keeps it fixed')
   parser.add_argument('--exaggerate', type=float, default=1.0,
                       help='stretch the altitude by this factor in the globe view, so that '
                            'a 150 km descent is visible against a 6378 km radius '
@@ -119,7 +139,9 @@ def argument():
   parser.add_argument('--azimuth', type=float, default=None,
                       help='camera azimuth of the 3D view at the first frame, deg (default: '
                            '-62 for the box, and the longitude of the trajectory for the '
-                           'globe, so that the track faces the camera)')
+                           'globe, so that the track faces the camera). In the follow view '
+                           'it is the offset from the longitude the camera is tracking '
+                           '(default -55)')
   parser.add_argument('--spin', type=float, default=35.0,
                       help='how far the 3D camera turns over the animation, deg')
   parser.add_argument('--altitude-max', type=float, default=0.0,
@@ -230,6 +252,69 @@ def normalize_longitude(longitude):
   return (longitude + 180.0) % 360.0 - 180.0
 
 
+def get_follow_window(position, position_reference, window_fixed):
+  #
+  # 追従カメラの窓（中心と半幅 [km]）をフレームごとに返す。
+  #
+  # 中心は基準ケースとケース群の重心の中点に置く。基準ケースにぴったり載せると、
+  # ケースは風で片側（風下）に寄るので窓の半分が空くことになる。
+  #
+  # 半幅は、その中心からいちばん離れているケースまでの距離に余白を掛けたもの。
+  # --window を与えればそれで固定する。基準ケースは別に見なくてよい:
+  # 中心が中点なので基準ケースの距離は |重心 - 基準|/2 であり、これは
+  # 最遠のケースの距離を超えられない（重心のずれは各ケースのずれの平均だから）。
+  #
+  # **狭める方向には動かさない**（累積の最大を取る）。散らばりが一時的に縮むたびに
+  # 寄っては引いてを繰り返すと、何が動いているのか読めなくなるため。
+  #
+  centre = 0.5*( position_reference + np.mean(position, axis=0) )
+
+  distance = np.linalg.norm(position - centre[np.newaxis, :, :], axis=2)
+  half     = MARGIN_FOLLOW*np.max(distance, axis=0)
+
+  if window_fixed > 0.0 :
+    half = np.full(position_reference.shape[0], window_fixed)
+  else :
+    half = np.maximum( np.maximum.accumulate(half), WINDOW_FOLLOW_MINIMUM )
+
+  return centre, half
+
+
+def get_scale_length(half_width):
+  #
+  # ものさしの長さ（km）。窓の半幅に収まる 1, 2, 5 x 10^n のうちいちばん大きいもの。
+  # follow では軸目盛りを切っている（地球を入れると枠が邪魔になる）ので、
+  # 代わりにこの 1 本で縮尺を示す。
+  #
+  if half_width <= 0.0 :
+    return 0.0
+
+  exponent = np.floor( np.log10(half_width) )
+  for factor in (5.0, 2.0, 1.0) :
+    length = factor*10.0**exponent
+    if length <= half_width :
+      return length
+
+  return 10.0**exponent
+
+
+def clip_to_window(line, centre, half):
+  #
+  # 窓から外れる点を NaN にして落とす。
+  #
+  # matplotlib の 3 次元は線を箱で切ってくれないので、そのまま渡すと窓の外の
+  # 点まで線が伸びて図が汚れる（animate_trajectory と同じ扱い）。
+  #
+  line    = np.array(line, dtype=float)
+  if line.size == 0 :
+    return line
+
+  outside = np.any( np.abs(line - centre) > half, axis=1 )
+  line[outside, :] = np.nan
+
+  return line
+
+
 def get_window(east, north):
   #
   # 散らばりの図の範囲。最後まで入るように全フレームから決め、原点も必ず含める。
@@ -322,12 +407,29 @@ def main():
     print('matplotlib is not available, so nothing can be drawn.')
     sys.exit(1)
 
+  flag_follow   = (args.view == 'follow')
   flag_globe    = (args.view == 'globe')
+  # ECEF の絶対座標で描く 2 つの view（地球ごとの globe と、追従カメラの follow）
+  flag_ecef     = flag_globe or flag_follow
   flag_relative = (args.view == '3d-relative')
-  flag_box      = args.view in ('3d', '3d-relative', 'globe')
+  flag_box      = args.view in ('3d', '3d-relative', 'globe', 'follow')
 
-  # カメラ。globe では既定で軌道の真上に置く（そうしないと地球の裏側を飛ぶことになる）
-  if flag_globe :
+  # 追従窓の中心と半幅（follow のときだけ使う）
+  centre_window = half_window = None
+  if flag_follow :
+    centre_window, half_window = get_follow_window(position, position_reference, args.window)
+
+  # カメラ
+  # --globe: 既定で軌道の真上に置く（そうしないと地球の裏側を飛ぶことになる）
+  # --follow: 仰角は斜め上から（高度差が読めるように）。方位は追いかけている点の
+  #   経度からの相対で毎フレーム作るので、ここでは基準だけ持つ
+  azimuth_offset = -55.0
+  if flag_follow :
+    elevation_view = 20.0
+    azimuth_view   = 0.0
+    if args.azimuth is not None :
+      azimuth_offset = args.azimuth
+  elif flag_globe :
     centre = position_reference[len(time_grid)//2]
     elevation_view = np.degrees(np.arcsin(centre[2]/np.linalg.norm(centre)))
     azimuth_view   = np.degrees(np.arctan2(centre[1], centre[0]))
@@ -336,7 +438,7 @@ def main():
     azimuth_view   = -62.0
   if args.elevation is not None :
     elevation_view = args.elevation
-  if args.azimuth is not None :
+  if args.azimuth is not None and not flag_follow :
     azimuth_view = args.azimuth
 
   figure = plt.figure(figsize=(13.0, 6.8))
@@ -496,7 +598,8 @@ def main():
   line_cep_box = None
   if ax_box is not None :
     for i in range(0, len(case_list)) :
-      if flag_relative :
+      if flag_relative or flag_follow :
+        # 窓を絞っているので 1 本ずつ見分けられる。色は東向きの風
         trail, = ax_box.plot([], [], [], color=colour[i], linewidth=0.8, alpha=0.6)
       else :
         # 絶対座標では 100 本が 1 本に重なるので、束として 1 色で描く
@@ -520,14 +623,46 @@ def main():
 
     for i, label in enumerate([mark[0] for mark in mark_list]) :
       trail, = ax_box.plot([], [], [], color=COLOR_MARK[i % len(COLOR_MARK)],
-                           linewidth=1.4 if flag_relative else 1.0)
+                           linewidth=1.4 if (flag_relative or flag_follow) else 1.0)
       point, = ax_box.plot([], [], [], marker='*', markersize=14, linestyle='none',
                            color=COLOR_MARK[i % len(COLOR_MARK)], markeredgecolor='black',
                            markeredgewidth=0.5, label=label)
       mark_box_trail.append(trail)
       mark_box_point.append(point)
 
-    if flag_globe :
+    if flag_follow :
+      # ---- ECEF（絶対座標）＋ 追従カメラ -------------------------------------
+      # 地球ごと入れると散らばりが埋もれるので、基準ケースのまわりの立方体だけを見る。
+      # 地表と等尺の箱は animate_trajectory のものを使う（形を二重に持たない）。
+      # matplotlib を要求する import なので、この分岐に入ってから読む
+      import animate_trajectory as animate_trajectory
+
+      ax_box.computed_zorder = False
+      for artist in trail_box + point_box + floor_box + mark_box_trail + mark_box_point :
+        artist.set_zorder(4)
+      shadow_box.set_visible(False)
+      line_cep_box.set_zorder(4)
+
+      # 基準ケースの現在位置。軌跡を基準からのずれで描くので、基準そのものは点になる
+      point_reference, = ax_box.plot([], [], [], marker='o', markersize=8, linestyle='none',
+                                     color=COLOR_TRACK, markeredgecolor='black',
+                                     markeredgewidth=0.6, zorder=5, label='reference')
+      # 地表は窓に入ったときだけ、現在位置のまわりに作り直す
+      ground_follow = {'surface': None, 'graticule': None}
+
+      # ものさし。軸目盛りを切っているので、長さはこの 1 本と状態表示で読む
+      line_scale, = ax_box.plot([], [], [], color='black', linewidth=2.4, zorder=6)
+
+      # 平行投影にする。透視投影だと窓の中の同じ距離が奥と手前で違って見えるので、
+      # 散らばりを読むのに向かない。zoom は箱を画面いっぱいに寄せるため
+      ax_box.set_proj_type('ortho')
+      ax_box.set_box_aspect((1.0, 1.0, 1.0), zoom=2.2)
+      ax_box.set_axis_off()
+      ax_box.set_title('Departure from the reference, in ECEF axes\n'
+                       '(the camera follows the reference; the bar is the scale)',
+                       fontsize=10)
+
+    elif flag_globe :
       # ---- ECEF（絶対座標）。地球ごと描く -----------------------------------
       # 地表の点と等尺の箱は animate_trajectory のものを使う（形を二重に持たない）。
       # matplotlib を要求する import なので、この分岐に入ってから読む
@@ -634,8 +769,9 @@ def main():
 
   # 状態の表示は、広いほうの図の隅に置く
   if flag_box :
+    # computed_zorder = False の図では、zorder を上げないと軌跡や分散円が文字に重なる
     text_state = ax_box.text2D(0.99, 0.99, '', transform=ax_box.transAxes, fontsize=10,
-                               ha='right', va='top', family='monospace',
+                               ha='right', va='top', family='monospace', zorder=20,
                                bbox=dict(boxstyle='round', facecolor='white',
                                          edgecolor='lightgray', alpha=0.92))
   else :
@@ -686,20 +822,48 @@ def main():
                              mark_list[i][2][index_first:index+1])
       point.set_data([mark_list[i][1][index]], [mark_list[i][2][index]])
 
-    # 3 次元の図（--view 3d / globe のときだけ）
-    if ax_box is not None and flag_globe :
+    # 3 次元の図（--view 3d / globe / follow のときだけ）
+    if ax_box is not None and flag_ecef :
+      # 追従カメラでは高度の引き伸ばしは効かせない（窓が数十 km なので、
+      # 引き伸ばすと窓の中の位置関係そのものが歪む）
+      factor_exaggerate = 1.0 if flag_follow else args.exaggerate
+
+      # 窓の中心（basis は基準ケース。中心はケース群との中点）
+      centre_follow = centre_window[index] if flag_follow else None
+      half_follow   = float(half_window[index]) if flag_follow else 0.0
+      if flag_follow :
+        unit_east_follow, unit_north_follow, unit_up_follow \
+          = dispersion.get_local_horizon(position_reference[index])
+
       # ECEF の絶対座標。基準ケースからの差ではなく軌道そのもの
+      # --follow だけは軌跡を**基準ケースからのずれ**にして、いまの基準位置に運ぶ。
+      #   窓は数十 km、1 フレームで機体は 90 km も進むので、絶対座標の軌跡は
+      #   1 点を残して窓から出てしまう。ずれで描けば「どこで離れ始めたか」が
+      #   そのまま残る（先頭は本当の現在位置と一致する）
       for i in range(0, len(case_list)) :
-        line = stretch_altitude(position[i, index_first:index+1, :], args.exaggerate)
-        trail_box[i].set_data(line[:, 0], line[:, 1])
-        trail_box[i].set_3d_properties(line[:, 2])
+        if flag_follow :
+          offset = (position[i, index_first:index+1, :]
+                    - position_reference[index_first:index+1, :])
+          line   = position_reference[index] + offset
+        else :
+          line = stretch_altitude(position[i, index_first:index+1, :], factor_exaggerate)
+        # 窓から外れる点は落とす（3 次元の線は箱で切ってくれない）
+        line_draw = clip_to_window(line, centre_follow, half_follow) if flag_follow else line
+        trail_box[i].set_data(line_draw[:, 0], line_draw[:, 1])
+        trail_box[i].set_3d_properties(line_draw[:, 2])
         point_box[i].set_data([line[-1, 0]], [line[-1, 1]])
         point_box[i].set_3d_properties([line[-1, 2]])
 
-      # 分散円は着地点の接平面に置く（この縮尺では点にしかならないが、位置は正しい）
+      if flag_follow :
+        # 基準ケースはずれ 0 なので点だけ。軌跡の束の起点がこれ
+        point_reference.set_data([position_reference[index][0]], [position_reference[index][1]])
+        point_reference.set_3d_properties([position_reference[index][2]])
+
+      # 分散円は接平面に置く。globe では着地点の接平面（この縮尺では点にしかならない
+      # が位置は正しい）、follow では基準ケースの現在位置（雲がそこに在るので）
       if len(case_list) > 2 :
         unit_east, unit_north, unit_up = dispersion.get_local_horizon(position_reference[index])
-        origin = RADIUS_PLANET*unit_up
+        origin = position_reference[index] if flag_follow else RADIUS_PLANET*unit_up
         for k, floor in enumerate(floor_box, start=1) :
           point_east, point_north = get_ellipse_point(east_mean, north_mean,
                                                       k*semi_major, k*semi_minor, angle)
@@ -713,11 +877,49 @@ def main():
         line_cep_box.set_3d_properties(line[:, 2])
 
       for i in range(0, len(mark_list)) :
-        line = stretch_altitude(mark_list[i][4][index_first:index+1, :], args.exaggerate)
-        mark_box_trail[i].set_data(line[:, 0], line[:, 1])
-        mark_box_trail[i].set_3d_properties(line[:, 2])
+        if flag_follow :
+          line = (position_reference[index]
+                  + mark_list[i][4][index_first:index+1, :]
+                  - position_reference[index_first:index+1, :])
+        else :
+          line = stretch_altitude(mark_list[i][4][index_first:index+1, :], factor_exaggerate)
+        line_draw = clip_to_window(line, centre_follow, half_follow) if flag_follow else line
+        mark_box_trail[i].set_data(line_draw[:, 0], line_draw[:, 1])
+        mark_box_trail[i].set_3d_properties(line_draw[:, 2])
         mark_box_point[i].set_data([line[-1, 0]], [line[-1, 1]])
         mark_box_point[i].set_3d_properties([line[-1, 2]])
+
+      if flag_follow :
+        # 窓を動かす。地表は窓に入ったときだけ、現在位置のまわりに描き直す
+        ax_box.set_xlim(centre_follow[0]-half_follow, centre_follow[0]+half_follow)
+        ax_box.set_ylim(centre_follow[1]-half_follow, centre_follow[1]+half_follow)
+        ax_box.set_zlim(centre_follow[2]-half_follow, centre_follow[2]+half_follow)
+
+        longitude_follow = np.degrees(np.arctan2(centre_follow[1], centre_follow[0]))
+        latitude_follow  = np.degrees(np.arcsin(centre_follow[2]/np.linalg.norm(centre_follow)))
+
+        for key in ('surface', 'graticule') :
+          if ground_follow[key] is not None :
+            ground_follow[key].remove()
+            ground_follow[key] = None
+        # ものさしは窓の下手前に置く（雲と重ならない場所）。
+        # 窓は立方体なので、中心からの**距離**が半幅を超えると窓の外に出る
+        # （下へ 0.8、南へ 0.8 と取ると距離は 1.13 倍になり、実際に消えていた）。
+        # 下へ 0.5・南へ 0.5、長さは半幅の 0.6 までに収めると距離は 0.77 倍で収まる
+        length_scale = get_scale_length(0.6*half_follow)
+        origin_scale = (centre_follow - 0.50*half_follow*unit_up_follow
+                        - 0.50*half_follow*unit_north_follow
+                        - 0.5*length_scale*unit_east_follow)
+        line = np.stack([origin_scale, origin_scale + length_scale*unit_east_follow])
+        line_scale.set_data(line[:, 0], line[:, 1])
+        line_scale.set_3d_properties(line[:, 2])
+
+        if np.linalg.norm(centre_follow) - half_follow < RADIUS_PLANET :
+          # 経緯線の間隔は窓の大きさに合わせる（数十 km の窓に 10 度刻みでは 1 本も入らない）
+          interval = max(0.05, round(np.degrees(half_follow/RADIUS_PLANET), 2))
+          ground_follow['surface'], ground_follow['graticule'] = \
+            animate_trajectory.make_planet(ax_box, longitude_follow, latitude_follow,
+                                           half_follow, interval)
 
     elif ax_box is not None :
       # 東・北（基準ケースから見た差）か、経度・緯度（絶対座標）か
@@ -770,11 +972,16 @@ def main():
         mark_box_point[i].set_data([mark_x[i][index]], [mark_y[i][index]])
         mark_box_point[i].set_3d_properties([mark_altitude_draw[i][index]])
 
-    # カメラをゆっくり回す（立体感の手がかり）
+    # カメラをゆっくり回す（立体感の手がかり）。
+    # follow では、追いかけている点の経度に張り付けたうえで回す
     if ax_box is not None :
       if len(time_grid) > 1 :
-        ax_box.view_init(elev=elevation_view,
-                         azim=azimuth_view + args.spin*index/float(len(time_grid)-1))
+        progress = index/float(len(time_grid)-1)
+        azimuth_now = azimuth_view
+        if flag_follow :
+          azimuth_now = np.degrees(np.arctan2(position_reference[index][1],
+                                              position_reference[index][0])) + azimuth_offset
+        ax_box.view_init(elev=elevation_view, azim=azimuth_now + args.spin*progress)
 
     # 地上軌跡と高度（ケースの平均で代表させる。この縮尺では 1 本に重なる）
     if ax_map is not None :
@@ -786,15 +993,19 @@ def main():
     line_sigma_east.set_data(time_grid[:index+1], sigma_east[:index+1])
     line_sigma_north.set_data(time_grid[:index+1], sigma_north[:index+1])
 
-    text_state.set_text(
-      't = {:6.0f} s   h = {:6.1f} km\n'
-      'mean  E {:+7.2f}  N {:+7.2f} km\n'
-      'sigma E {:6.2f}  N {:6.2f} km\n'
-      'CEP50 {:6.2f} km'
-      .format(time_grid[index], altitude_reference[index], east_mean, north_mean,
-              float(np.std(east_now, ddof=1)) if len(case_list) > 1 else 0.0,
-              float(np.std(north_now, ddof=1)) if len(case_list) > 1 else 0.0,
-              radius))
+    message = ('t = {:6.0f} s   h = {:6.1f} km\n'
+               'mean  E {:+7.2f}  N {:+7.2f} km\n'
+               'sigma E {:6.2f}  N {:6.2f} km\n'
+               'CEP50 {:6.2f} km'
+               .format(time_grid[index], altitude_reference[index], east_mean, north_mean,
+                       float(np.std(east_now, ddof=1)) if len(case_list) > 1 else 0.0,
+                       float(np.std(north_now, ddof=1)) if len(case_list) > 1 else 0.0,
+                       radius))
+    if flag_follow :
+      # 追従窓は毎フレーム広がるので、いまの縮尺を書いておく
+      message = message + '\nwindow +-{:5.2f} km   bar {:g} km'.format(
+                            float(half_window[index]), get_scale_length(0.6*float(half_window[index])))
+    text_state.set_text(message)
 
     return []
 

@@ -39,11 +39,11 @@ figure to put in a report.
 
 ## What is drawn
 
-There are four views: `--view flat` (the default), `3d`, `3d-relative` and `globe`. All
-of them keep the dispersion plane and the history; what changes is the panel next to
-them. `3d` and `globe` draw the trajectories **as they are** — the absolute path the run
-computed — while `3d-relative` measures everything from the reference case at the same
-time, which is the one that shows the dispersion growing.
+There are five views: `--view flat` (the default), `3d`, `3d-relative`, `globe` and
+`follow`. All of them keep the dispersion plane and the history; what changes is the panel
+next to them. `3d` and `globe` draw the trajectories **as they are** — the absolute path
+the run computed — while `3d-relative` and `follow` measure everything from the reference
+case at the same time, which is what shows the dispersion growing.
 
 | Panel | What it shows |
 |---|---|
@@ -51,6 +51,7 @@ time, which is the one that shows the dispersion growing.
 | Trajectories (`3d`, left) | the paths themselves, in a box of **longitude, latitude and altitude** — the absolute trajectory, not a difference. The dispersion ellipses lie on the floor at the impact point, and a grey shadow follows each case. At this scale the 100 cases lie on one another, so they are drawn as a single bundle |
 | Trajectories (`3d-relative`, left) | the same box, but measured **from the reference case at the same time**, in east and north from it. This is the one that shows the bundle coming down tight and unravelling into the ellipse; the cases are coloured by their wind |
 | Trajectories in ECEF (`globe`, left) | the **absolute** trajectories, in ECEF, drawn with the Earth and a graticule every 30 deg. The 100 cases lie within tens of kilometres of each other against a radius of 6378 km, so they are drawn as one bundle in a single colour; the dispersion ellipses are placed on the tangent plane at the impact point, where they are the size of a dot. `--exaggerate` stretches the altitude about the surface (a 150 km descent is 2 % of the radius), and the camera looks at the middle of the track unless `--azimuth` and `--elevation` say otherwise |
+| Trajectories (`follow`, left) | the same ECEF axes as `globe`, but with the **camera following the reference case**: the window is a cube around it, so the tens of kilometres of dispersion are not lost against a radius of 6378 km. What is drawn inside it is each case's **departure from the reference at the same time**, carried to the reference's current position — in one frame the vehicle covers some 90 km, so an absolute trail would leave the window at once, while a departure trail keeps the whole history of how the case came away, and its head is the case's true position. The window widens with the dispersion (`--window` fixes it), the cases are coloured by their wind, the ellipses lie on the tangent plane at the reference, the ground appears once it is inside the window, and the bar is the scale, since the axes are switched off. Unlike `3d-relative` the three directions are at the same scale and the ground is there |
 | Altitude and dispersion (lower) | the altitude against time in grey, and on the right-hand axis the 1 sigma spread of the cases, east and north. This is where the wind is read off: the spread grows only while the vehicle is in the air the wind is blowing |
 | Dispersion | each case as a point, with the path it has taken, measured **from the reference case at the same time** in the local horizon (east, north, km). The 1, 2 and 3 sigma covariance ellipses and the CEP 50 % circle are redrawn every frame, so the cloud is seen growing from a point into the final ellipse |
 
@@ -114,10 +115,11 @@ another name to compare).
 | `--frames` | number of frames the run is resampled to (default 180) |
 | `--fps` | frames per second (default 20) |
 | `--tail` | length of the trail behind each case in seconds; 0 (the default) keeps the whole path |
-| `--view` | `flat` (default), `3d`, `3d-relative` or `globe` |
+| `--view` | `flat` (default), `3d`, `3d-relative`, `globe` or `follow` |
+| `--window` | half width of the `follow` window, km; 0 (the default) widens it with the dispersion itself |
 | `--exaggerate` | stretch the altitude by this factor in the globe view (1.0, the default, is the true scale) |
 | `--altitude-max` | upper limit of the altitude axis of the 3D view, km; 0 (default) covers the whole descent |
-| `--elevation`, `--azimuth` | camera of the 3D view at the first frame, deg. Left out, the box uses 20 and -62, and the globe looks at the middle of the track |
+| `--elevation`, `--azimuth` | camera of the 3D view at the first frame, deg. Left out, the box uses 20 and -62, and the globe looks at the middle of the track. In `follow` the elevation is 20 and `--azimuth` is the offset from the longitude being tracked (-55) |
 | `--spin` | how far the 3D camera turns over the animation, deg (default 35) |
 | `--dpi` | resolution (default 110) |
 | `--embed-limit` | size limit of the frames embedded in an `.html` output, MB (default 512) |
@@ -134,11 +136,16 @@ another name to compare).
 - Longitudes are unwrapped when they are read, so an entry crossing the 180th meridian
   averages correctly; the axis is labelled back in `[-180, 180)`.
 - 100 cases at 180 frames take about 30 s to write as an `.mp4` of some 1.3 MB, about
-  40 s for `--view 3d` and about a minute for `--view globe` (the Earth is redrawn every
-  frame).
-- The globe view borrows the Earth's surface and the equal-scale box from
-  `../animate_trajectory/`, which is imported only when that view is asked for, so the
-  tool still runs without matplotlib being importable at start-up.
+  40 s for `--view 3d`, about a minute for `--view globe` (the whole Earth is redrawn
+  every frame) and about 20 s for `--view follow` (3.8 MB; only the patch of ground inside
+  the window is drawn, and only once it is inside it).
+- The globe and follow views borrow the Earth's surface, the local ground patch and the
+  equal-scale box from `../animate_trajectory/`, which is imported only when one of those
+  views is asked for, so the tool still runs without matplotlib being importable at
+  start-up. The follow camera is the same idea as `animate_trajectory --window`.
+- The follow window is a **cube**, so a point is inside it only while its distance from
+  the centre is below the half width; the scale bar is placed with that in mind (it was
+  disappearing when it was put at 0.8 of the half width in two directions at once).
 - A single case can also be animated in three dimensions over the globe, with its
   attitude, by `../animate_trajectory/`; this tool is for what the cases do *relative to
   each other*.
