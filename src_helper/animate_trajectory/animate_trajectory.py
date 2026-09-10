@@ -44,6 +44,7 @@ if GENERAL_DIR not in sys.path :
 import tecplot_reader as tecplot_reader  # noqa: E402
 import vehicle_shape as vehicle_shape    # noqa: E402
 import helper_config as helper_config    # noqa: E402
+import coastline as coastline            # noqa: E402
 
 # 設定ファイル（config_helper.yml）の中でこのツールが読むセクション
 NAME_SECTION = 'animate_trajectory'
@@ -54,6 +55,10 @@ RADIUS_PLANET = 6378.137
 # 表示の色
 COLOR_PLANET   = '#9ecae1'
 COLOR_GRATICULE = '#6baed6'
+COLOR_COASTLINE = '#37576b'
+
+# 海岸線は一度読めば足りる（毎フレーム読み直さないための控え）
+SEGMENT_COASTLINE = None
 COLOR_PATH     = '#bdbdbd'
 COLOR_TRAIL    = '#d95f02'
 COLOR_VELOCITY = '#111111'
@@ -84,6 +89,8 @@ def argument():
                       help='size of the vehicle drawn on the ground view, km (exaggerated)')
   parser.add_argument('--window', type=float, default=1800.0,
                       help='half width of the ground view, km. 0 shows the whole trajectory')
+  parser.add_argument('--no-coastline', dest='coastline', action='store_false',
+                      help='leave the coastline off the ground and the globe')
   parser.add_argument('--fixed-view', action='store_true',
                       help='do not let the camera follow the vehicle')
   parser.add_argument('--elevation', type=float, default=22.0, help='camera elevation, deg')
@@ -130,7 +137,44 @@ def surface_points(range_longitude, range_latitude, num_longitude, num_latitude)
           RADIUS_PLANET*np.sin(grid_lat))
 
 
-def make_planet(ax, longitude_center, latitude_center, half_width_km, interval_graticule=10.0):
+def get_coastline():
+  #
+  # 同梱の海岸線を読む（初回だけ）。テキスト 1 枚で、numpy 以外に依存は無い。
+  #
+  global SEGMENT_COASTLINE
+  if SEGMENT_COASTLINE is None :
+    SEGMENT_COASTLINE = coastline.read_coastline()
+
+  return SEGMENT_COASTLINE
+
+
+def make_coastline(ax, range_longitude=None, range_latitude=None, radius=RADIUS_PLANET,
+                   linewidth=0.8, zorder=2, direction_view=None):
+  #
+  # 海岸線を描いて artist を返す（描くものが無ければ None）。
+  #
+  # 範囲を渡せばその窓の中だけを切り出す。全球なら範囲を省く。
+  # direction_view（カメラの向き）を渡すと、地球の裏側のぶんを落とす
+  # （不透明な地表でも線は透けるので、渡さないと大陸が鏡像で重なる）。
+  #
+  segment_list = get_coastline()
+  if range_longitude is not None :
+    segment_list = coastline.select_range(segment_list, range_longitude, range_latitude)
+
+  segment = coastline.get_segment_ecef(segment_list, radius)
+  if direction_view is not None :
+    segment = coastline.select_visible(segment, direction_view)
+  if len(segment) == 0 :
+    return None
+
+  line = Line3DCollection(segment, colors=COLOR_COASTLINE, linewidths=linewidth, zorder=zorder)
+  ax.add_collection3d(line)
+
+  return line
+
+
+def make_planet(ax, longitude_center, latitude_center, half_width_km, interval_graticule=10.0,
+                flag_coastline=True):
   #
   # 現在位置のまわりの地表と緯度経度線を描き、作った artist を返す。
   #
@@ -167,19 +211,30 @@ def make_planet(ax, longitude_center, latitude_center, half_width_km, interval_g
                              RADIUS_PLANET*np.cos(angle)*np.sin(longitude),
                              RADIUS_PLANET*np.sin(angle)*np.ones_like(longitude)], axis=1))
 
-  graticule = None
+  artist_list = [surface]
+
   if len(segment) > 0 :
     graticule = Line3DCollection(segment, colors=COLOR_GRATICULE, linewidths=0.5, alpha=0.7)
     ax.add_collection3d(graticule)
+    artist_list.append(graticule)
 
-  return surface, graticule
+  # 海岸線。窓の中だけを切り出す（全球ぶんを毎フレーム描くと遅い）
+  if flag_coastline :
+    line = make_coastline(ax, range_longitude, range_latitude, zorder=1)
+    if line is not None :
+      artist_list.append(line)
+
+  # 呼ぶ側は毎フレーム remove() して作り直す。数が変わるのでリストで返す
+  return artist_list
 
 
-def make_globe(ax, position):
+def make_globe(ax, position, flag_coastline=True):
   # 全球のインセット。どのあたりを飛んでいるかの手掛かり
   x, y, z = surface_points((-180.0, 180.0), (-90.0, 90.0), 48, 24)
   ax.plot_surface(x, y, z, color=COLOR_PLANET, alpha=0.35, linewidth=0.0,
                   edgecolor='none', antialiased=True, shade=False)
+  if flag_coastline :
+    make_coastline(ax, linewidth=0.5)
   ax.plot(position[:, 0], position[:, 1], position[:, 2], color=COLOR_TRAIL, linewidth=1.2)
   set_equal_box(ax, RADIUS_PLANET*1.05)
   ax.set_axis_off()
@@ -275,11 +330,11 @@ def main():
   ax_orbit.set_title('Trajectory over the ground (ECEF)\nvehicle drawn {:.0f} km across (exaggerated)'.format(
                      args.scale), fontsize=10)
 
-  ground = {'surface': None, 'graticule': None}
+  ground = {'artist': []}
 
   # 全球のインセット（いまどのあたりか）
   ax_globe = figure.add_axes([0.015, 0.60, 0.17, 0.30], projection='3d')
-  make_globe(ax_globe, position)
+  make_globe(ax_globe, position, args.coastline)
   marker_globe, = ax_globe.plot([], [], [], 'o', color='#d62728', markersize=5)
 
   # --- 右上: ローカル水平系での姿勢
@@ -388,11 +443,10 @@ def main():
     ax_globe.view_init(elev=20.0, azim=longitude - 20.0)
 
     # 地表を現在位置のまわりに作り直す
-    for key in ('surface', 'graticule'):
-      if ground[key] is not None :
-        ground[key].remove()
-    ground['surface'], ground['graticule'] = make_planet(
-      ax_orbit, longitude, latitude, half_view, interval_graticule)
+    for artist in ground['artist']:
+      artist.remove()
+    ground['artist'] = make_planet(ax_orbit, longitude, latitude, half_view,
+                                   interval_graticule, args.coastline)
 
     center_view = position_now if args.window > 0.0 else center_fixed
     ax_orbit.set_xlim(center_view[0]-half_view, center_view[0]+half_view)

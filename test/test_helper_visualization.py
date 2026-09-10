@@ -24,8 +24,13 @@ HELPER_DIR = os.path.join(ROOT_DIR, 'src_helper', 'animate_trajectory')
 if HELPER_DIR not in sys.path:
     sys.path.insert(0, HELPER_DIR)
 
+GENERAL_DIR = os.path.join(ROOT_DIR, 'src_helper', 'general')
+if GENERAL_DIR not in sys.path:
+    sys.path.insert(0, GENERAL_DIR)
+
 import tecplot_reader  # noqa: E402
 import vehicle_shape   # noqa: E402
+import coastline       # noqa: E402
 
 TECPLOT_3DOF = os.path.join(ROOT_DIR, 'tutorial', 'work', 'output_result', 'tecplot.dat')
 TECPLOT_6DOF = os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_6dof', 'output_result', 'tecplot.dat')
@@ -164,6 +169,104 @@ class TestVehicleShape(unittest.TestCase):
 
 
 @unittest.skipUnless(HAS_MATPLOTLIB, 'matplotlib is not installed')
+class TestCoastline(unittest.TestCase):
+    """
+    3 次元の図に入れる海岸線（src_helper/general/coastline.py と同梱のテキスト）。
+
+    cartopy / shapely / pyproj を持ち込まないためにテキスト 1 枚に落としてあるので、
+    ここで見るのは「読めること」「窓で正しく切り出せること」
+    「Line3DCollection に渡せる形になること」「地球の裏側を落とせること」。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.segment = coastline.read_coastline()
+
+    def test_the_shipped_file_is_read(self):
+        self.assertGreater(len(self.segment), 100)
+        self.assertGreater(sum(len(line) for line in self.segment), 5000)
+        for line in self.segment:
+            self.assertEqual(line.shape[1], 2)
+            self.assertGreater(len(line), 1)
+
+    def test_the_coordinates_are_degrees_of_longitude_and_latitude(self):
+        longitude = np.concatenate([line[:, 0] for line in self.segment])
+        latitude = np.concatenate([line[:, 1] for line in self.segment])
+        self.assertGreaterEqual(float(np.min(longitude)), -180.0)
+        self.assertLessEqual(float(np.max(longitude)), 180.0)
+        self.assertGreaterEqual(float(np.min(latitude)), -90.0)
+        self.assertLessEqual(float(np.max(latitude)), 90.0)
+
+    def test_a_window_holds_the_coast_it_should(self):
+        # 日本のあたりと、太平洋の真ん中（着地点の近く）
+        near_japan = coastline.select_range(self.segment, (135.0, 145.0), (30.0, 40.0))
+        self.assertGreater(len(near_japan), 0)
+
+        empty = coastline.select_range(self.segment, (-160.0, -159.0), (24.0, 25.0))
+        self.assertEqual(len(empty), 0)
+
+    def test_a_polyline_is_cut_where_it_leaves_the_window(self):
+        # 切らずに端の点を結ぶと、窓を横切る直線が 1 本引かれてしまう
+        line = np.array([[0.0, 0.0], [1.0, 0.0], [50.0, 0.0], [51.0, 0.0],
+                         [2.0, 0.0], [3.0, 0.0]])
+        selected = coastline.select_range([line], (-5.0, 5.0), (-5.0, 5.0))
+        # 断片は 2 つ。それぞれ窓の中の点と、外へ出る 1 点だけ
+        self.assertEqual([len(piece) for piece in selected], [3, 3])
+        np.testing.assert_allclose(selected[0][:, 0], [0.0, 1.0, 50.0])
+        np.testing.assert_allclose(selected[1][:, 0], [51.0, 2.0, 3.0])
+
+    def test_the_window_may_cross_the_180th_meridian(self):
+        # 窓は中心 ± 余白で作られるので 180 度を越えることがある
+        line = np.array([[179.0, 0.0], [-179.0, 0.0]])
+        selected = coastline.select_range([line], (175.0, 185.0), (-5.0, 5.0))
+        self.assertEqual(len(selected), 1)
+        np.testing.assert_allclose(selected[0][:, 0], [179.0, 181.0])
+
+    def test_the_folding_keeps_the_longitude_inside_the_window(self):
+        np.testing.assert_allclose(coastline.fold_longitude(np.array([-179.0]), (175.0, 185.0)),
+                                   [181.0])
+        np.testing.assert_allclose(coastline.fold_longitude(np.array([179.0]), (-185.0, -175.0)),
+                                   [-181.0])
+
+    def test_the_segments_are_pairs_of_points_on_the_sphere(self):
+        # Line3DCollection は点数の揃ったセグメントしか受けない（不揃いだと ValueError）
+        segment = coastline.get_segment_ecef(self.segment[0:3])
+        self.assertEqual(segment.ndim, 3)
+        self.assertEqual(segment.shape[1:], (2, 3))
+        radius = np.linalg.norm(segment.reshape(-1, 3), axis=1)
+        np.testing.assert_allclose(radius, coastline.RADIUS_PLANET, rtol=1.e-12)
+
+        # 折れ線の点の数より 1 つ少ないセグメントに割れること
+        self.assertEqual(len(segment), sum(len(line) - 1 for line in self.segment[0:3]))
+
+    def test_nothing_in_the_window_gives_no_segment(self):
+        self.assertEqual(len(coastline.get_segment_ecef([])), 0)
+
+    def test_the_far_side_of_the_globe_is_dropped(self):
+        # 不透明な地表でも線は透けるので、落とさないと大陸が鏡像で重なる
+        radius = coastline.RADIUS_PLANET
+        segment = np.array([[[radius, 0.0, 0.0], [radius, 1.0, 0.0]],
+                            [[-radius, 0.0, 0.0], [-radius, 1.0, 0.0]]])
+        direction = coastline.get_view_direction(0.0, 0.0)
+        visible = coastline.select_visible(segment, direction)
+
+        self.assertEqual(len(visible), 1)
+        self.assertGreater(float(visible[0, 0, 0]), 0.0)
+
+    def test_the_view_direction_follows_the_camera(self):
+        np.testing.assert_allclose(coastline.get_view_direction(0.0, 0.0), [1.0, 0.0, 0.0],
+                                   atol=1.e-12)
+        np.testing.assert_allclose(coastline.get_view_direction(0.0, 90.0), [0.0, 1.0, 0.0],
+                                   atol=1.e-12)
+        np.testing.assert_allclose(coastline.get_view_direction(90.0, 0.0), [0.0, 0.0, 1.0],
+                                   atol=1.e-12)
+
+    def test_the_planet_radius_agrees_with_the_drawing_tools(self):
+        # 二重に持っている値なので、ずれたら困る
+        import animate_trajectory
+        self.assertEqual(coastline.RADIUS_PLANET, animate_trajectory.RADIUS_PLANET)
+
+
 class TestAnimationScript(unittest.TestCase):
     """CLI が実際に絵を書けること。1 コマだけ書かせて確かめる。"""
 
@@ -191,6 +294,14 @@ class TestAnimationScript(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
             self.assertTrue(os.path.exists(output))
             self.assertIn('No attitude columns', completed.stdout)
+
+    def test_the_coastline_can_be_left_off(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = os.path.join(directory, 'snapshot.png')
+            completed = self.run_script([TECPLOT_6DOF, '-o', output, '--no-coastline',
+                                         '--snapshot', '300', '--dpi', '50'])
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertGreater(os.path.getsize(output), 1000)
 
     def test_an_html_animation_is_written_as_a_single_file(self):
         #

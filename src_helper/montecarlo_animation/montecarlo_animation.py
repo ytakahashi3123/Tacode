@@ -134,6 +134,8 @@ def argument():
                            'least this factor times the altitude of the reference, so the '
                            'surface is in the frame from the first breath of the entry. '
                            '0 leaves the window to the dispersion alone')
+  parser.add_argument('--no-coastline', dest='coastline', action='store_false',
+                      help='leave the coastline off the ground of the globe and follow views')
   parser.add_argument('--scale-bar', action='store_true',
                       help='draw a scale bar with ticks in the follow view. The window is '
                            'written in the state box in any case')
@@ -679,7 +681,7 @@ def main():
                                      color=COLOR_TRACK, markeredgecolor='black',
                                      markeredgewidth=0.6, zorder=5, label='reference')
       # 地表は窓に入ったときだけ、現在位置のまわりに作り直す
-      ground_follow = {'surface': None, 'graticule': None}
+      ground_follow = {'artist': []}
 
       # ものさし（--scale-bar）。軸目盛りを切っているので、頼まれたらこれで示す。
       # 目盛りと数字を付けないと、ただの線が何を意味するのか分からない
@@ -723,6 +725,10 @@ def main():
                     RADIUS_PLANET*np.cos(angle)*np.sin(longitude),
                     RADIUS_PLANET*np.sin(angle)*np.ones_like(longitude),
                     color='#6baed6', linewidth=0.4, zorder=1)
+
+      # 海岸線（同梱のテキスト）。カメラが回ると見える半球が変わるので、
+      # 裏側を落としたものを毎フレーム引き直す（update のなかで）
+      coast_globe = {'artist': None}
 
       # 基準ケースの軌道（あれば）を灰色で通しておく
       if args.reference is not None :
@@ -924,6 +930,17 @@ def main():
         mark_box_point[i].set_data([line[-1, 0]], [line[-1, 1]])
         mark_box_point[i].set_3d_properties([line[-1, 2]])
 
+      if flag_globe and args.coastline :
+        # 地球の裏側の海岸線を落とす（線は不透明な地表でも透けるため）。
+        # カメラの向きは下のブロックと同じ式で作る
+        if coast_globe['artist'] is not None :
+          coast_globe['artist'].remove()
+        direction = animate_trajectory.coastline.get_view_direction(
+                      elevation_view,
+                      azimuth_view + args.spin*index/float(max(len(time_grid)-1, 1)))
+        coast_globe['artist'] = animate_trajectory.make_coastline(
+                                  ax_box, linewidth=0.9, zorder=2, direction_view=direction)
+
       if flag_follow :
         # 窓を動かす。地表は窓に入ったときだけ、現在位置のまわりに描き直す
         ax_box.set_xlim(centre_follow[0]-half_follow, centre_follow[0]+half_follow)
@@ -933,10 +950,9 @@ def main():
         longitude_follow = np.degrees(np.arctan2(centre_follow[1], centre_follow[0]))
         latitude_follow  = np.degrees(np.arcsin(centre_follow[2]/np.linalg.norm(centre_follow)))
 
-        for key in ('surface', 'graticule') :
-          if ground_follow[key] is not None :
-            ground_follow[key].remove()
-            ground_follow[key] = None
+        for artist in ground_follow['artist'] :
+          artist.remove()
+        ground_follow['artist'] = []
         if line_scale is not None :
           # ものさしは窓の下手前に置く（雲と重ならない場所）。
           # 窓は立方体なので、中心からの**距離**が半幅を超えると窓の外に出る
@@ -964,9 +980,9 @@ def main():
         if np.linalg.norm(centre_follow) - half_follow < RADIUS_PLANET :
           # 経緯線の間隔は窓の大きさに合わせる（数十 km の窓に 10 度刻みでは 1 本も入らない）
           interval = max(0.05, round(np.degrees(half_follow/RADIUS_PLANET), 2))
-          ground_follow['surface'], ground_follow['graticule'] = \
+          ground_follow['artist'] = \
             animate_trajectory.make_planet(ax_box, longitude_follow, latitude_follow,
-                                           half_follow, interval)
+                                           half_follow, interval, args.coastline)
 
     elif ax_box is not None :
       # 東・北（基準ケースから見た差）か、経度・緯度（絶対座標）か

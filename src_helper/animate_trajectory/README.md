@@ -97,6 +97,7 @@ another name to compare).
 | `--scale` | how large the vehicle is drawn on the ground view, in km (default 500) |
 | `--window` | half width of the ground view, in km (default 1800). `0` fits the whole trajectory instead of following the vehicle |
 | `--fixed-view` | keep the camera still instead of turning it with the vehicle |
+| `--no-coastline` | leave the coastline off the ground and the globe |
 | `--elevation` | camera elevation of the ground view, deg |
 | `--dpi` | resolution. Lower it for a smaller file |
 | `--embed-limit` | how many MB of frames an `.html` output may embed (default 512). Beyond it the animation is silently cut short, so the script says when the limit was reached |

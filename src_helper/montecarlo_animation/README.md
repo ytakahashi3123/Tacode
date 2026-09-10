@@ -119,6 +119,7 @@ another name to compare).
 | `--window` | half width of the `follow` window, km; 0 (the default) takes it from the dispersion and `--ground` |
 | `--ground` | keep the ground in the `follow` window: the half width is at least this factor times the altitude of the reference (1.15; 0 turns it off) |
 | `--scale-bar` | draw a scale bar with ticks and its length in the `follow` view (off by default; the window is in the state box in any case) |
+| `--no-coastline` | leave the coastline off the ground of the `globe` and `follow` views |
 | `--exaggerate` | stretch the altitude by this factor in the globe view (1.0, the default, is the true scale) |
 | `--altitude-max` | upper limit of the altitude axis of the 3D view, km; 0 (default) covers the whole descent |
 | `--elevation`, `--azimuth` | camera of the 3D view at the first frame, deg. Left out, the box uses 20 and -62, and the globe looks at the middle of the track. In `follow` the elevation is 20 and `--azimuth` is the offset from the longitude being tracked (-55) |
@@ -148,9 +149,14 @@ another name to compare).
 - The follow window is a **cube**, so a point is inside it only while its distance from
   the centre is below the half width; the scale bar is placed with that in mind (it was
   disappearing when it was put at 0.8 of the half width in two directions at once).
-- The ground of the follow view is a patch of the sphere with a graticule, the same one
-  `animate_trajectory` draws, redrawn around the reference every frame. There is no
-  coastline or map on it.
+- The ground of the follow view is a patch of the sphere with a graticule and the
+  coastline, the same one `animate_trajectory` draws, redrawn around the reference every
+  frame. The globe view carries the coastline as well, with the far hemisphere dropped so
+  that the continents do not show through the Earth. `--no-coastline` leaves it out. The
+  coastline is Natural Earth 1:110 m shipped as text in `../general/`, so nothing is
+  downloaded and no `cartopy` is needed; at the scale of the follow window (tens of
+  kilometres) there is often no coast in sight, and the wind tutorial lands in the open
+  Pacific.
 - A single case can also be animated in three dimensions over the globe, with its
   attitude, by `../animate_trajectory/`; this tool is for what the cases do *relative to
   each other*.

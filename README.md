@@ -589,7 +589,10 @@ dispersion ellipses lying on the floor at the impact point. `--view globe` draws
 absolute trajectories in ECEF with the Earth around them, and `--exaggerate` stretches
 the altitude about the surface when the descent itself is what should be visible (150 km
 is 2 % of the radius). In both, the 100 cases lie on one another at that scale, so they
-are drawn as a single bundle.
+are drawn as a single bundle. The Earth carries a coastline — Natural Earth 1:110 m,
+shipped as text in `src_helper/general/`, read with numpy alone, so no `cartopy` and no
+download are involved — with the far hemisphere dropped, since matplotlib's 3-D does not
+hide lines behind a surface. `--no-coastline` leaves it out.
 
 `--view 3d-relative` measures the same box **from the reference case at the same time**
 instead. That is the view for the dispersion itself: the bundle comes down tight and
