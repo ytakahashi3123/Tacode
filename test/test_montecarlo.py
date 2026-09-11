@@ -354,6 +354,62 @@ class TestFindingTheCaseDirectories(unittest.TestCase):
             self.assertEqual(case_list, ['case0001', 'case0002'])
 
 
+class TestTheRandomSeed(unittest.TestCase):
+    """
+    montecarlo.random_seed。
+
+    シードが無いと、同じ config でも毎回違うケース群になる（＝報告書に載せた図を
+    作り直せない）。既定は従来どおり None で、与えたときだけ再現する。
+    """
+
+    DEFAULT = [7450.0, 0.0, 120.0]
+    DISPERSION = 0.2
+
+    @staticmethod
+    def _driver(section):
+        driver = montecarlo()
+        driver.set_random_generator(section)
+        return driver
+
+    def test_the_same_seed_gives_the_same_dispersion(self):
+        first = self._driver({'random_seed': 12345})
+        second = self._driver({'random_seed': 12345})
+        for _ in range(0, 5):
+            self.assertEqual(first.get_dispersed_value(self.DEFAULT, self.DISPERSION),
+                             second.get_dispersed_value(self.DEFAULT, self.DISPERSION))
+
+    def test_another_seed_gives_another_dispersion(self):
+        first = self._driver({'random_seed': 12345})
+        second = self._driver({'random_seed': 54321})
+        self.assertNotEqual(first.get_dispersed_value(self.DEFAULT, self.DISPERSION),
+                            second.get_dispersed_value(self.DEFAULT, self.DISPERSION))
+
+    def test_without_the_key_the_seed_stays_off(self):
+        driver = self._driver({})
+        self.assertIsNone(driver.random_seed)
+        # 種を取っていないだけで、振れ幅は同じ
+        value = driver.get_dispersed_value(self.DEFAULT, self.DISPERSION)
+        self.assertEqual(len(value), len(self.DEFAULT))
+
+    def test_the_dispersion_is_multiplicative(self):
+        driver = self._driver({'random_seed': 7})
+        for _ in range(0, 50):
+            value = driver.get_dispersed_value(self.DEFAULT, self.DISPERSION)
+            # 基準値 0 の成分は動かない
+            self.assertEqual(value[1], 0.0)
+            for index in (0, 2):
+                self.assertGreaterEqual(value[index], self.DEFAULT[index]*(1.0 - 0.5*self.DISPERSION))
+                self.assertLessEqual(value[index], self.DEFAULT[index]*(1.0 + 0.5*self.DISPERSION))
+
+    def test_no_configuration_shipped_with_the_code_fixes_the_seed(self):
+        # tutorial のモンテカルロは従来どおり毎回違うケース群を作る
+        for path in (CONFIG_MONTECARLO_WIND,
+                     os.path.join(ROOT_DIR, 'tutorial', 'work_montecarlo', 'config.yml')):
+            with open(path) as f:
+                config = yaml.safe_load(f)
+            self.assertIsNone(config['montecarlo'].get('random_seed'), path)
+
+
 class TestDetectingCasesWhichFail(unittest.TestCase):
     """
     ケースが落ちたことを親が検知すること。

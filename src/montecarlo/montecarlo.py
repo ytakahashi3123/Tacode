@@ -25,6 +25,12 @@ class montecarlo(orbital):
     self.case_no_result     = []     # 結果ファイルが無い（または空の）ケース
     self.flag_allow_failure = False
 
+    # 分散を振る乱数。**シードを与えると同じ config が同じケース群を作る**
+    # （報告書の図を作り直せるようにするため）。既定は None で、OS のエントロピーから
+    # 種を取る従来どおりの挙動。initial_settings で config の値に置き換わる
+    self.random_seed      = None
+    self.random_generator = random.Random()
+
     return
 
 
@@ -62,6 +68,8 @@ class montecarlo(orbital):
     #   古いconfigにこれらのキーが無くても動くようにget_settingで読む
     section = config['montecarlo']
     self.flag_allow_failure = bool( get_setting(section, 'flag_allow_failure', False) )
+
+    self.set_random_generator(section)
     self.result_dir       = get_setting(section, 'result_dir', 'result_tacode')
     self.flag_tecplot     = bool( get_setting(section, 'flag_tecplot', False) )
     self.filename_tecplot = get_setting(section, 'filename_tecplot', 'tecplot_montecarlo.dat')
@@ -71,6 +79,31 @@ class montecarlo(orbital):
       super().make_directory(self.result_dir)
 
     return
+
+
+  def set_random_generator(self, section):
+    #
+    # 分散を振る乱数を用意する。
+    #
+    # **montecarlo.random_seed を与えると、同じ config が同じケース群を作る。**
+    # 既定は None で、OS のエントロピーから種を取る従来どおりの挙動（毎回違う）。
+    # 報告書に載せた図を作り直すには、そのときのシードが要る。
+    #
+    self.random_seed      = get_setting(section, 'random_seed', None)
+    self.random_generator = random.Random(self.random_seed)
+    if self.random_seed is not None :
+      print('--Random seed:', self.random_seed)
+
+    return
+
+
+  def get_dispersed_value(self, value_default, dispersion):
+    #
+    # 基準値に分散を掛ける。**分散は乗算（相対）**なので、基準値 0 の成分は動かない
+    # （加算の分散は当面不要というユーザー判断、2026-09-10）。
+    #
+    return [ value*(1.0 + (self.random_generator.random() - 0.50)*dispersion)
+             for value in value_default ]
 
 
   def is_toplevel(self, line):
@@ -381,9 +414,7 @@ class montecarlo(orbital):
 
       txt_indentified = var_name_ctl
       ele_indentified = len(var_default)
-      txt_replaced = []
-      for m in range(0,ele_indentified):
-        txt_replaced.append( str(var_default[m]*(1.0+(random.random()-0.50)*var_dispersion) ) )
+      txt_replaced = [ str(value) for value in self.get_dispersed_value(var_default, var_dispersion) ]
 
       print('Variable:',var_name_ctl,'in',var_root_ctl, ',Default:',var_default, ',With dispersion:',txt_replaced)
       self.rewrite_control(filename_ctl, txt_indentified, ele_indentified, txt_replaced, var_root_ctl)
