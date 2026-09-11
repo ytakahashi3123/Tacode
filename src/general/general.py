@@ -100,26 +100,21 @@ class general:
 
 
   def make_directory(self, dir_path):
-  
-    import os as os
-    import shutil as shutil
 
-    if not os.path.exists(dir_path):
-      os.mkdir(dir_path)
-    
+    # 親ディレクトリごと作る。os.mkdir だと directory_output: nested/output_result で
+    # FileNotFoundError の生のトレースバックになり、他のエラー経路と流儀が揃わない
+    os.makedirs(dir_path, exist_ok=True)
+
     return
 
 
   def make_directory_rm(self, dir_path):
-  
-    import os as os
+
     import shutil as shutil
 
-    if not os.path.exists(dir_path):
-      os.mkdir(dir_path)
-    else:
+    if os.path.exists(dir_path):
       shutil.rmtree(dir_path)
-      os.mkdir(dir_path)
+    os.makedirs(dir_path)
 
     return
     
