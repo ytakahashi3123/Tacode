@@ -5,6 +5,7 @@ import numpy as np
 import os as os
 import scipy.interpolate
 import attitude.attitude as attitude
+from general.general import get_database_directory
 
 # Dict key
 KEY_LENGTH   = 'characteristic_length'
@@ -153,13 +154,7 @@ def set_satellite_property(config):
 
 def read_aerodynamic_file(config):
 
-  script_directory = os.path.dirname(os.path.realpath(__file__))
-  if config['satellite']['directory_path_specify'] == 'auto' or config['satellite']['directory_path_specify'] == 'default':
-    directory_path = script_directory + '/../../database/aerodynamic' 
-  elif config['satellite']['directory_path_specify'] == 'manual':
-    directory_path = config['satellite']['directory_aerodynamic']
-  else :
-    directory_path = script_directory + '/../../database/aerodynamice' 
+  directory_path = get_database_directory(config['satellite'], 'satellite', 'aerodynamic', 'directory_aerodynamic')
 
   filename_tmp = directory_path + '/' + config['satellite']['filename_aerodynamic']
   print('Reading aerodynamic model...:', filename_tmp)

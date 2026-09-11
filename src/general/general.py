@@ -3,8 +3,18 @@
 # Author: Y.Takahashi, Hokkaido University
 # Date: 2022/03/31
 
+import os as os
 import sys as sys
 import numpy as np
+
+
+# データベースの既定の置き場。このファイルの位置から解決するので、
+# カレントディレクトリがどこでもリポジトリ直下の database/ を指す
+DIRECTORY_DATABASE = os.path.normpath(
+  os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../database'))
+
+# directory_path_specify に書ける値
+LIST_PATH_SPECIFY = ['default', 'auto', 'manual']
 
 
 def get_setting(section, key, default):
@@ -20,6 +30,40 @@ def get_setting(section, key, default):
   if value is None :
     return default
   return value
+
+
+def get_database_directory(section, name_section, name_database, key_directory, directory_manual_default=None):
+  #
+  # データベース（大気・空力・風）のディレクトリを解決する。**4 か所にあった同じ分岐を
+  # ここ 1 つにまとめてある。**
+  #
+  #   default / auto : リポジトリ直下の database/<name_database>（スクリプト位置基準）
+  #   manual         : section[key_directory]（カレントディレクトリ基準の相対パス）
+  #   それ以外       : 止める
+  #
+  # **綴り違いを既定へ落とさない。** 以前は 'Manual' のような値が黙って default 扱いに
+  # なり、ケースが自分の database/ に置いたテーブルではなくマスターを読んでいた
+  # （しかも分岐ごとに既定のパスが違い、片方は綴りを間違えたディレクトリを指していた）。
+  #
+  path_specify = get_setting(section, 'directory_path_specify', 'default')
+
+  if path_specify not in LIST_PATH_SPECIFY :
+    print('directory_path_specify in the section "' + name_section + '" is incorrect:', path_specify)
+    print('--Give one of:', ', '.join(LIST_PATH_SPECIFY))
+    print('Program stopped.')
+    sys.exit(1)
+
+  if path_specify == 'manual' :
+    directory_path = get_setting(section, key_directory, directory_manual_default)
+    if directory_path is None :
+      print('"' + key_directory + '" is missing in the section "' + name_section + '".')
+      print('--It is required by directory_path_specify: manual (a path relative to the')
+      print('--current directory), or use directory_path_specify: default instead.')
+      print('Program stopped.')
+      sys.exit(1)
+    return directory_path
+
+  return os.path.join(DIRECTORY_DATABASE, name_database)
 
 
 class general:

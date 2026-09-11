@@ -42,7 +42,7 @@ import os as os
 import scipy.interpolate
 import coordinate_system.coordinate_system as coordinate_system
 import epoch.epoch as epoch_module
-from general.general import get_setting
+from general.general import get_setting, get_database_directory
 
 # Dict key
 KEY_MODEL     = 'kind_wind_model'
@@ -186,12 +186,7 @@ def read_wind_file(config):
   #
   section = config['wind']
 
-  script_directory = os.path.dirname(os.path.realpath(__file__))
-  path_specify     = get_setting(section, 'directory_path_specify', 'default')
-  if path_specify == 'manual' :
-    directory_path = get_setting(section, 'directory_wind', 'database/wind')
-  else :
-    directory_path = script_directory + '/../../database/wind'
+  directory_path = get_database_directory(section, 'wind', 'wind', 'directory_wind', 'database/wind')
 
   filename_tmp = directory_path + '/' + get_setting(section, 'filename_wind', 'windmodel.txt')
   print('Reading wind model...:', filename_tmp)

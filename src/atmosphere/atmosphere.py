@@ -7,6 +7,8 @@ import scipy.interpolate
 
 import re
 
+from general.general import get_database_directory
+
 # 単位変換
 # ’read_atmosphere_file’でKey errorがあったときは下記の単位変換が正しいかチェックする
 unit_convert ={'km':1.0, 'cm-3':1.e6, 'g/cm-3': 1.e3, 'K': 1.0}
@@ -139,13 +141,7 @@ def set_interpolator(atmosphere_dict):
 
 def read_atmosphere_file(config):
 
-  script_directory = os.path.dirname(os.path.realpath(__file__))
-  if config['atmosphere']['directory_path_specify'] == 'auto' or config['atmosphere']['directory_path_specify'] == 'default':
-    directory_path = script_directory + '/../../database/atmosphere' 
-  elif config['atmosphere']['directory_path_specify'] == 'manual':
-    directory_path = config['atmosphere']['directory_atmosphere'] 
-  else :
-    directory_path = script_directory + '/../../database/atmosphere' 
+  directory_path = get_database_directory(config['atmosphere'], 'atmosphere', 'atmosphere', 'directory_atmosphere')
 
   filename_tmp = directory_path + '/' + config['atmosphere']['filename_atmosphere']
   print('Reading atmosphere model...:', filename_tmp)
