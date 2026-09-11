@@ -65,7 +65,6 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
   elif kind_aerodynamic_model == 'fileread' :
     knudsen_aerodynamic  = aerodynamic_dict['Knudsen_number']
     cdmean_aerodynamic   = aerodynamic_dict['CD_mean']
-    altitude_aerodynamic = aerodynamic_dict['Altitude']
     interpolator_aerodynamic = aerodynamic_dict[satellite.KEY_INTERP]
   else :
     print('kind_aerodynamic_model in config is incorrect.')

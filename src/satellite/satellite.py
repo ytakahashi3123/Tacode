@@ -149,16 +149,6 @@ def set_interpolator(aerodynamic_dict):
   return aerodynamic_dict
 
 
-def set_satellite_property(config):
-
-  mass_satellite      = config['satellite']['mass']
-  dragcoef_satellite  = config['satellite']['drag_coefficient']
-  area_satellite      = config['satellite']['characteristic_aree']
-  length_satellite    = config['satellite']['characteristic_length']
-
-  return
-
-
 def read_aerodynamic_file(config):
 
   directory_path = get_database_directory(config['satellite'], 'satellite', 'aerodynamic', 'directory_aerodynamic')
