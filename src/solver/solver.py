@@ -24,6 +24,13 @@ fact_up   = [1.0, 2.0, 2.0, 1.0]
 # 力が時刻に依らなかったこれまでは要らなかったが、風は時刻に依る
 fact_time_rk = [0.0, 0.5, 0.5, 1.0]
 
+# 姿勢の時間刻みの検査を行う間隔, s
+# --検査は「まだ警告していない間」ずっと走る。毎ステップ引くと係数表を 2 回引き直すので、
+#   6 自由度計算の 9% をそれだけで使う（実測: 12.3 s -> 11.3 s、出力は md5 一致）。
+#   周期の見積もりを動かすのは動圧で、動圧が変わる時間尺度は秒の桁なので、
+#   それより細かく見直す意味は無い。
+INTERVAL_CHECK_TIMESTEP = 1.0
+
 
 
 def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, atmosphere_dict, aerodynamic_dict, attitude_dict=None, wind_dict=None):
@@ -104,6 +111,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
 
     # 姿勢振動に対して時間刻みが粗すぎないかの確認（1 度だけ警告する）
     flag_warned_timestep = False
+    time_checked_timestep = time_elapsed - INTERVAL_CHECK_TIMESTEP
   else :
     moment               = None
     attitude_property    = None
@@ -112,6 +120,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
     rotation_rate_planet = None
     stability_derivative = 0.0
     flag_warned_timestep = True
+    time_checked_timestep = None
 
   # Calculation parameter settings
   kind_time_scheme = config['time_integration']['kind_time_scheme']
@@ -333,7 +342,10 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
       omega_list.append( omega_tmp )
 
       # 姿勢振動の周期に対して時間刻みが粗いと発散するので、最初に条件を割ったところで警告する
-      if not flag_warned_timestep :
+      # （INTERVAL_CHECK_TIMESTEP ごと。警告が 1 秒遅れても困らない）
+      if not flag_warned_timestep and \
+         time_elapsed - time_checked_timestep >= INTERVAL_CHECK_TIMESTEP :
+        time_checked_timestep = time_elapsed
         # 動圧は対気速度で作る（風があると振動周期の見積もりが変わる）
         veloc_aero_tmp = wind.get_relative_velocity(config, coord_tmp, coord_geodetic, veloc_tmp, wind_dict,
                                                     time_elapsed + delta_time)

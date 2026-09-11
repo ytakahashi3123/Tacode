@@ -369,6 +369,43 @@ class TestShippedTimestep(unittest.TestCase):
                                          atmosphere_dict, aerodynamic_dict, attitude_dict)
         self.assertNotIn('coarse for the attitude oscillation', buffer.getvalue())
 
+    def test_the_check_runs_at_most_once_per_interval(self):
+        # 検査は係数表を 2 回引き直すので、毎ステップ走らせると 6 自由度計算の 9% を
+        # それだけで使う。solver.INTERVAL_CHECK_TIMESTEP ごとに 1 度で足りる
+        # （警告が 1 秒遅れても困らない）。
+        time_maximum = 20.0
+        config = copy.deepcopy(self.config)
+        config['computational_setup']['time_elapsed_maximum'] = time_maximum
+        config['time_integration']['timestep_constant'] = self.TIMESTEP_SHIPPED
+
+        number_step = int(time_maximum/self.TIMESTEP_SHIPPED)
+        counter = []
+        function_original = solver.check_timestep_attitude
+
+        def counting(*argument, **keyword):
+            counter.append(1)
+            return function_original(*argument, **keyword)
+
+        solver.check_timestep_attitude = counting
+        try:
+            with quiet():
+                atmosphere_dict = atmosphere.initial_settings_atmosphere(config)
+                aerodynamic_dict = satellite.initial_settings_satellite(config)
+                orb = orbital()
+                iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = \
+                    orb.initial_settings(config)
+                attitude_dict = orb.initial_settings_attitude(config, coordinate_dict, velocity_dict)
+                solver.solve_equation_motion(config, iteration, time_elapsed,
+                                             coordinate_dict, velocity_dict, trajectory_dict,
+                                             atmosphere_dict, aerodynamic_dict, attitude_dict)
+        finally:
+            solver.check_timestep_attitude = function_original
+
+        number_expected = time_maximum/solver.INTERVAL_CHECK_TIMESTEP
+        self.assertLessEqual(len(counter), number_expected + 1)
+        self.assertGreaterEqual(len(counter), number_expected - 1)
+        self.assertLess(len(counter), number_step)
+
 
 if __name__ == '__main__':
     unittest.main()
