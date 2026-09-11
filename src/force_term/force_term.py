@@ -3,8 +3,65 @@
 # Author: Y.Takahashi, Hokkaido University
 # Date: 2022/05/23
 
+import sys as sys
 import numpy as np
 from orbital.orbital import orbital
+from general.general import get_setting
+
+
+def get_bank_angle(config, time_elapsed):
+  #
+  # バンク角 [deg.]。既定は satellite.bank_angle（定数）。
+  #
+  # **satellite.bank_angle_table があればそちらを使う。** 表は [時刻 s, バンク角 deg.] の
+  # 並びで、時刻は計算の経過時間。時刻について線形内挿し、両端の外は端の値で止める。
+  # 実機のロール変調を入力にするためのもので（validation/apollo10）、誘導則そのものは
+  # 持たない。
+  #
+  section = config['satellite']
+  table = get_setting(section, 'bank_angle_table', None)
+  if table is None :
+    return float( get_setting(section, 'bank_angle', 0.0) )
+
+  node = np.array(table, dtype=float)
+  if node.ndim != 2 or node.shape[1] != 2 or node.shape[0] < 2 :
+    print('satellite.bank_angle_table must be a list of at least two [time, angle] pairs.')
+    print('Program stopped.')
+    sys.exit(1)
+  if np.any( np.diff(node[:,0]) <= 0.0 ) :
+    print('The time of satellite.bank_angle_table must increase.')
+    print('Program stopped.')
+    sys.exit(1)
+
+  return float( np.interp(time_elapsed, node[:,0], node[:,1]) )
+
+
+def get_lift_direction(coordinate, velocity_aero, angle_bank):
+  #
+  # 揚力の単位ベクトル（ECEF 成分）。
+  #
+  # 揚力は対気速度に直交する。バンク角 0 で「速度と鉛直上向きが張る面の中で上向き側」、
+  # バンク角は**速度ベクトルまわり**に測り、**正で進行方向の右側**へ倒す
+  # （bank 90 deg. で水平右、180 deg. で下向き）。鉛直は地心の上向き r/|r| を使う
+  # （初期速度・風と同じ地心ローカル系の規約。README の Reference frame の節）。
+  #
+  # 速度が鉛直と平行なときは「面」が定まらない。そのとき揚力は 0 とする
+  # （真上・真下に飛んでいる瞬間だけで、軌道計算では起きない）。
+  #
+  direction_velocity = velocity_aero/np.linalg.norm(velocity_aero)
+  direction_up       = coordinate/np.linalg.norm(coordinate)
+
+  # 速度に直交する成分（バンク 0 の向き）
+  component_up = direction_up - np.dot(direction_up, direction_velocity)*direction_velocity
+  magnitude_up = np.linalg.norm(component_up)
+  if magnitude_up <= 0.0 :
+    return np.zeros(3)
+  component_up = component_up/magnitude_up
+
+  # 進行方向の右側（東向きに飛んでいれば南）
+  component_right = np.cross(direction_velocity, component_up)
+
+  return np.cos(angle_bank)*component_up + np.sin(angle_bank)*component_right
 
 
 def force_initialsettings(config):
@@ -14,7 +71,7 @@ def force_initialsettings(config):
   return force
 
 
-def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, cdmean_aerodynamic, density_factor, density, force, force_aerodynamic=None, velocity_air=None):
+def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, cdmean_aerodynamic, density_factor, density, force, force_aerodynamic=None, velocity_air=None, angle_bank=None):
   
   potential_factor     = config['planet']['potential_factor']
   radius_equat_planet  = config['planet']['radius']
@@ -88,6 +145,20 @@ def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, 
     force[4,0] = -fact_aero * velocity_aero[0]
     force[4,1] = -fact_aero * velocity_aero[1]
     force[4,2] = -fact_aero * velocity_aero[2]
+
+    # 揚力。**既定は satellite.lift_coefficient = 0 で、そのときここは一切通らない**
+    # （＝揚力を入れなければ従来の出力とビット単位で同じ）。
+    # 6 自由度では姿勢から力が決まるので、この枝には来ない。
+    coefficient_lift = float( get_setting(config['satellite'], 'lift_coefficient', 0.0) )
+    if coefficient_lift != 0.0 :
+      # バンク角は呼び出し側（solver）が段の時刻で引いて渡す。None のときは
+      # 時刻に依らない設定として読む
+      angle_tmp  = get_bank_angle(config, 0.0) if angle_bank is None else angle_bank
+      fact_lift  = 0.50*density_factor*density*velocity_mag**2*area_satellite*coefficient_lift/mass_satellite
+      direction_lift = get_lift_direction(coordinate, velocity_aero, angle_tmp*orbital.deg2rad)
+      force[4,0] = force[4,0] + fact_lift*direction_lift[0]
+      force[4,1] = force[4,1] + fact_lift*direction_lift[1]
+      force[4,2] = force[4,2] + fact_lift*direction_lift[2]
   else :
     force[4,0] = force_aerodynamic[0]
     force[4,1] = force_aerodynamic[1]

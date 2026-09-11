@@ -69,6 +69,25 @@ satellite:
   # Drag coefficient (aerodynamic_model: constant)
   drag_coefficient: 1.0
 
+  # Lift coefficient and bank angle, 3-DOF only (deg.)
+  # --The lift is perpendicular to the air-relative velocity. The bank angle is measured
+  #   about the velocity vector from the local vertical-up direction, positive towards the
+  #   right of the flight direction: 0 is lift up, 90 is lift to the right, 180 is lift
+  #   down. It is held constant through the run.
+  # --0.0 (the default; the keys may be left out altogether) means drag only, which
+  #   reproduces the results of earlier versions bit for bit.
+  # --Not used in a 6-DOF run, where the lift follows from the attitude and the table.
+  lift_coefficient: 0.0
+  bank_angle: 0.0
+
+  # The bank angle may instead be given as a table against the elapsed time [s],
+  # interpolated linearly and clamped outside its range. Each Runge-Kutta stage reads
+  # it at its own time. This is how a measured roll history is flown; there is no
+  # guidance law in the code. It overrides bank_angle above when it is present.
+  #bank_angle_table:
+  #  - [  0.0,   0.0]
+  #  - [ 60.0, 180.0]
+
   # Drag coefficient (aerodynamic model: fileinput)
   # --manual: directory_aerodynamic below, relative to the current directory.
   #   The tutorial cases keep their own copy of the tables in <case>/database,

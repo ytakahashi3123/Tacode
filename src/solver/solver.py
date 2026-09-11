@@ -201,9 +201,12 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
         force_aerodynamic = None
 
       # Calculate force
+      # --揚力のバンク角は時刻に依り得る（表で与えるとき）。段の時刻で引く
+      angle_bank = force_term.get_bank_angle(config, time_elapsed)
       force = force_term.force_routine(config, coord_tmp, veloc_tmp,   \
                                        mass_satellite, area_satellite, \
-                                       cdmean, density_factor, density, force, force_aerodynamic, velocity_air)
+                                       cdmean, density_factor, density, force, force_aerodynamic, velocity_air,
+                                       angle_bank)
       #"density factor" added by Tomoki Sakai 2023/2/3
       force_total = force[0,:]
  
@@ -285,9 +288,12 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
           force_aerodynamic = None
 
         # Calculate force
+        # --揚力のバンク角も各段の時刻で引く（風と同じ扱い）
+        angle_bank = force_term.get_bank_angle(config, time_elapsed + fact_time_rk[m]*delta_time)
         force = force_term.force_routine(config, r_virtual, v_virtual, \
                                          mass_satellite, area_satellite, \
-                                         cdmean, density_factor, density, force, force_aerodynamic, velocity_air)
+                                         cdmean, density_factor, density, force, force_aerodynamic, velocity_air,
+                                         angle_bank)
         #"density factor" added by Tomoki Sakai 2023/2/3
         force_total = force[0,:]
  
