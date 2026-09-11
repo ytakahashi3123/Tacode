@@ -1,0 +1,289 @@
+# Apollo 10 (AS-505) entry, 1969-05-26
+#
+# Validation case. **The bank angle is flight data here**, not an assumption: NASA
+# TN D-6725 figure 12 plots the roll angle the vehicle actually held, and figure 13
+# the altitude and velocity it flew. See README.md for the sources of every number.
+#
+#   Entry state : NASA TN D-6725, table II (best-estimated trajectory)
+#   Bank angle  : NASA TN D-6725, figure 12, digitised (digitize_figure.py)
+#   Flight data : NASA TN D-6725, figure 13, digitised
+#   Aerodynamics: NASA TN D-6725, table I (trim coefficients, M > 29.5)
+#   Geometry    : NASA TN D-3890 (maximum diameter 154 in.)
+
+computational_setup:
+  # Flag for initial or restart calculation
+  # --True: initial condition, False: restart
+  flag_initial: True
+
+  # Maximum time step, s
+  # --The digitised flight data ends 414 s after the entry interface, at 28 km.
+  time_elapsed_maximum: 450.0
+
+  # Sanity check on the state (a diverged run stops instead of being written out)
+  flag_check_divergence: True
+  factor_radius_maximum: 10.0
+  factor_velocity_maximum: 10.0
+
+
+satellite:
+  # Mass, kg
+  # --Entry mass of the Apollo 10 command module. The value is not in the references
+  #   collected for this case; 5500 kg is the figure commonly quoted for a lunar-return
+  #   CM at entry. The sensitivity to it is reported in README.md.
+  mass: 5500.0
+  # Characteristic area, m^2
+  # --pi/4 x 3.9116^2, the maximum diameter of 154 in. (NASA TN D-3890)
+  characteristic_area: 12.0171
+  # Characteristic length, m
+  characteristic_length: 3.9116
+
+  # Aerodynamic model
+  # --constant, or fileread
+  kind_aerodynamic_model: constant
+
+  # Drag coefficient (aerodynamic_model: constant)
+  # --Trim value at M > 29.5 from NASA TN D-6725 table I, the report this case is
+  #   built from. Figure 14 of the same report shows the L/D measured in flight
+  #   agreeing with the preflight 0.30 to within the predicted 0.03.
+  drag_coefficient: 1.2891
+
+  # Lift coefficient and bank angle (3-DOF)
+  # --CL = 0.38773 is the trim value on the same line of table I (L/D = 0.30076).
+  # --**The bank angle is the roll angle measured in flight** (figure 12 of the same
+  #   report, digitised by digitize_figure.py; see reference/apollo10_roll.dat).
+  #   0 deg. is lift up, 180 deg. is lift down; the table is read by linear
+  #   interpolation in the time from the entry interface and clamped outside it.
+  lift_coefficient: 0.38773
+
+  # Bank angle [deg.] against the time from the entry interface [s], from figure 12.
+  # Written by digitize_figure.py (5 s steps); reference/apollo10_roll.dat holds the
+  # digitised trace itself.
+  bank_angle_table:
+    - [   0.0,     1.28]
+    - [   5.0,     1.28]
+    - [  10.0,     1.34]
+    - [  15.0,     1.56]
+    - [  20.0,     1.31]
+    - [  25.0,     1.79]
+    - [  30.0,     2.08]
+    - [  35.0,     2.49]
+    - [  40.0,     1.99]
+    - [  45.0,     2.20]
+    - [  50.0,     3.32]
+    - [  55.0,     2.00]
+    - [  60.0,     3.41]
+    - [  65.0,     5.92]
+    - [  70.0,     6.49]
+    - [  75.0,     7.61]
+    - [  80.0,     1.79]
+    - [  85.0,    13.55]
+    - [  90.0,    66.45]
+    - [  95.0,    55.43]
+    - [ 100.0,    98.66]
+    - [ 105.0,   155.54]
+    - [ 110.0,   182.82]
+    - [ 115.0,   182.82]
+    - [ 120.0,   182.82]
+    - [ 125.0,   182.82]
+    - [ 130.0,   182.82]
+    - [ 135.0,   103.82]
+    - [ 140.0,     3.84]
+    - [ 145.0,     0.76]
+    - [ 150.0,    -0.76]
+    - [ 155.0,     8.46]
+    - [ 160.0,     4.02]
+    - [ 165.0,    12.00]
+    - [ 170.0,    25.98]
+    - [ 175.0,    42.51]
+    - [ 180.0,    44.58]
+    - [ 185.0,    44.10]
+    - [ 190.0,    43.56]
+    - [ 195.0,    44.34]
+    - [ 200.0,    52.39]
+    - [ 205.0,    56.04]
+    - [ 210.0,    61.05]
+    - [ 215.0,    48.52]
+    - [ 220.0,   -34.09]
+    - [ 225.0,   -45.01]
+    - [ 230.0,   -57.68]
+    - [ 235.0,   -64.47]
+    - [ 240.0,   -66.35]
+    - [ 245.0,   -68.29]
+    - [ 250.0,   -73.62]
+    - [ 255.0,   -74.05]
+    - [ 260.0,   -75.30]
+    - [ 265.0,   -76.44]
+    - [ 270.0,   -76.94]
+    - [ 275.0,   -77.19]
+    - [ 280.0,   -76.03]
+    - [ 285.0,   -75.42]
+    - [ 290.0,   -75.98]
+    - [ 295.0,   -77.24]
+    - [ 300.0,   -74.05]
+    - [ 305.0,   -69.34]
+    - [ 310.0,   -66.92]
+    - [ 315.0,   -65.99]
+    - [ 320.0,   -58.27]
+    - [ 325.0,   -56.35]
+    - [ 330.0,   -33.24]
+    - [ 335.0,   -39.45]
+    - [ 340.0,    17.29]
+    - [ 345.0,     8.97]
+    - [ 350.0,    82.60]
+    - [ 355.0,    99.70]
+    - [ 360.0,    99.93]
+    - [ 365.0,    87.44]
+    - [ 370.0,    81.99]
+    - [ 375.0,    77.12]
+    - [ 380.0,    65.90]
+    - [ 385.0,    -3.55]
+    - [ 390.0,   -57.05]
+    - [ 395.0,   -64.35]
+    - [ 400.0,   -79.88]
+    - [ 405.0,   -75.52]
+    - [ 410.0,   -75.13]
+    - [ 415.0,   -74.20]
+    - [ 420.0,   -21.24]
+    - [ 425.0,    83.33]
+    - [ 430.0,   102.62]
+    - [ 435.0,    98.96]
+    - [ 440.0,   100.77]
+
+  # Not used with kind_aerodynamic_model: constant
+  directory_path_specify: manual # default or manual
+  directory_aerodynamic: database/aerodynamic
+  filename_aerodynamic: aerodynamic.txt
+
+initial_settings:
+  # Initial conditions at the entry interface (NASA TN D-6725, table II)
+  # --The table gives the INERTIAL speed, flight-path angle and azimuth; Tacode wants
+  #   the ECEF velocity in the geocentric local horizon. entry_state.py does the
+  #   conversion and prints exactly the block below.
+  # Initial coordinate, 1:Long.(deg) 2: Lat.(deg), 3:Alt.(km)
+  coordinate:
+    - 174.2440
+    - -23.6520
+    - 123.8833
+  # [East, North, Up] in the local geocentric horizon, m/s
+  velocity:
+    - 10016.49
+    - 3413.34
+    - -1266.84
+  density_factor:
+    - 1.0
+
+
+planet:
+  # Gravitational constant, M.m2/kg2
+  gravitational_constant: 6.67408e-11
+  # Planet mass (Earth), kg
+  mass: 5.9723662e+24
+  # Planet radius on Equator, m
+  radius: 6.3781370e+6
+  # Ellipticity
+  ellipticity: 3.35281066474e-3
+  # Rotation rate, rad/s
+  rotation_rate: 7.292115e-5
+  # Dynamic form factor (J2) for potential calculation
+  potential_factor:
+    J2: 1.082629e-3
+    J22: -1.81222e-6
+    J3: -2.5356e-6
+    J4: -1.62336e-6
+    Lambda22: -14.545   # Degree
+
+
+epoch:
+  # Absolute time of the initial condition (UTC)
+  # --The entry interface is at 191:48:52.16 ground elapsed time, and lift-off was
+  #   1969-05-18 16:49:00 UTC. Nothing in this case depends on the epoch (the wind
+  #   is off); it records when the state vector applies and ties the case to the
+  #   atmosphere table, which was generated for it.
+  flag_epoch: True
+  datetime: '1969-05-26T16:37:52Z'
+
+
+atmosphere:
+  # Atmosphere model
+  # --constant, or fileread
+  kind_atmosphere_model: fileread
+
+  # Atmosphere model: constant settings
+  # Densitry, kg/m3
+  density: 1.e-3
+  # Temperature, K
+  temperature: 300.0
+
+  # Atmosphere model: file input
+  # --NRLMSISE-00 at the entry point and the entry time, generated by
+  #   database/atmosphere/generate_atmosphere_table.py. F10.7 = F10.7A = 150,
+  #   Ap = 4 (the indices of the day were not available offline).
+  directory_path_specify: manual # default or manual
+  directory_atmosphere: database/atmosphere
+  filename_atmosphere: atmospheremodel_apollo10.txt
+
+
+wind:
+  # No wind: the atmosphere co-rotates with the Earth, as table I assumes when it
+  # reports a "relative velocity".
+  flag_wind: False
+  kind_wind_model: constant
+  velocity:
+    - 10016.49
+    - 3413.34
+    - -1266.84
+  velocity_factor:
+    - 1.0
+
+
+time_integration:
+  # Time marching scheme
+  # --"runge_kutta", "explicit_euler"
+  kind_time_scheme: runge_kutta
+
+  # Constant timestep, s
+  # --The deceleration peaks at 6.8 g; 0.05 s resolves it with room to spare
+  #   (the step study is in README.md).
+  timestep_constant: 0.05
+
+
+restart_process:
+  # Output directory
+  directory_output: output_restart
+
+  # Time series
+  # --True: stored individually as time series, False: stored by overwriting
+  flag_time_series: False
+
+  # Digid for step
+  digid_step: 4
+
+  # Restart step for reading
+  restart_step: 500
+
+  # Restart file name (output)
+  file_restart: restart.dat
+
+  # Output frequency
+  frequency_output: 1
+
+
+post_process:
+  # Output directory
+  directory_output: output_result
+
+  # Output (KML)
+  kml:
+    flag_output: True
+    filename_output: geodetic.kml
+    linestyle_color: simplekml.Color.white
+    linestyle_width: 4
+    extrude: 1
+    frequency_output: 200
+
+  # Output (Tecplot)
+  tecplot:
+    flag_output: True
+    filename_output: tecplot.dat
+    # --One line per second of flight
+    frequency_output: 20

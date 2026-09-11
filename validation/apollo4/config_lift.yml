@@ -1,0 +1,376 @@
+# Apollo 4 (AS-501) entry, 1967-11-09 -- lifting entry
+#
+# The same case as config.yml, with the lift switched on. Run it with
+#
+#   ./run_tacode.sh -file config_lift.yml
+#
+# **The bank angle is the one measured in flight** (NASA TN D-5399, figure 6(b)).
+# Before that figure was found this case used a constant bank; the sweep over constant
+# angles is kept in README.md for comparison.
+#
+# Validation case; see README.md in this directory for the sources of every number
+# and for what the comparison does and does not show.
+#
+#   Flight data : NASA TM X-58091, table I (45-day best estimated trajectory)
+#   Aerodynamics: NASA TN D-6725, table I (trim coefficients, M > 29.5)
+#   Geometry    : NASA TN D-3890 (maximum diameter 154 in.)
+#
+# **Three degrees of freedom means drag only.** Apollo 4 flew a lifting entry
+# (L/D = 0.30) with roll modulation, so the computed trajectory is expected to
+# depart from the flight data; the size of that departure is the result here.
+
+computational_setup:
+  # Flag for initial or restart calculation
+  # --True: initial condition, False: restart
+  flag_initial: True
+
+  # Maximum time step, s
+  # --The flight table ends 552 s after entry interface, at 37 km altitude.
+  time_elapsed_maximum: 700.0
+
+  # Sanity check on the state (a diverged run stops instead of being written out)
+  flag_check_divergence: True
+  factor_radius_maximum: 10.0
+  factor_velocity_maximum: 10.0
+
+
+satellite:
+  # Mass, kg
+  # --Entry mass of the command module: 11 959 lb at the entry interface
+  #   (NASA TN D-5399, table II, which also gives the mass loss through the entry:
+  #   11 659 lb at drogue deployment, 2.5 % less, which this case does not model).
+  mass: 5424.6
+  # Characteristic area, m^2
+  # --pi/4 x 3.9116^2, the maximum diameter of 154 in. (NASA TN D-3890)
+  characteristic_area: 12.0171
+  # Characteristic length, m
+  characteristic_length: 3.9116
+
+  # Aerodynamic model
+  # --constant, or fileread
+  kind_aerodynamic_model: constant
+
+  # Drag coefficient (aerodynamic_model: constant)
+  # --Trim value at M > 29.5: CD = 1.2891 at alpha = 160.06 deg. (NASA TN D-6725,
+  #   table I). The same table gives CL = 0.38773, which a 3-DOF run cannot use.
+  drag_coefficient: 1.2891
+
+  # Lift coefficient and bank angle (3-DOF, aerodynamic_model: constant)
+  # --CL = 0.368 x CD. **0.368 is the lift-to-drag ratio derived from the Apollo 4
+  #   flight itself** (NASA TN D-5399, the average between trim and the first peak g).
+  #   The trim table of NASA TN D-6725 gives 0.30076, but that is the Apollo 11
+  #   command module, which trimmed at a smaller angle of attack.
+  # --The lift is perpendicular to the air-relative velocity. The bank angle is measured
+  #   about the velocity vector from the local vertical-up direction, positive towards
+  #   the right of the flight direction: 0 deg. is lift up, 180 deg. is lift down.
+  # --0.0 (the default, and config.yml) leaves the run drag-only, bit for bit.
+  lift_coefficient: 0.47439
+
+  # **The direction of the lift Apollo 4 actually flew.** It is computed from the
+  # flight-derived vertical lift-to-drag ratio of NASA TN D-5399 figure 16(a),
+  #
+  #   bank = arccos( (L/D)v / 0.368 )
+  #
+  # digitised by digitize_bank.py (see reference/apollo4_liftvertical.dat). The time
+  # is seconds from the entry interface.
+  # --The bank angle plotted in figure 6(b) of the same report says the same thing
+  #   (the two agree to 0.03 in (L/D)v), but it is the control history, and a few
+  #   seconds of reading error in its fast reversals moves the vertical lift by a
+  #   factor of two right where the trajectory is most sensitive. The vertical lift
+  #   is the quantity the trajectory responds to, so it is read directly.
+  # --The sign of the bank (left or right) is lost in the arccos; it does not enter
+  #   the vertical motion.
+  # --The angle is written **continuous, not folded into +-180 deg.**: the vehicle
+  #   rolls through 180 deg. at 110-145 s, and interpolating the folded values would
+  #   turn the lift the wrong way round through that manoeuvre. Only cos and sin of
+  #   the angle enter the force, so a value of -213 deg. is the same attitude as
+  #   +147 deg.
+  bank_angle_table:
+    - [   0.0,    20.35]
+    - [   5.0,    20.35]
+    - [  10.0,    20.35]
+    - [  15.0,    20.35]
+    - [  20.0,    20.35]
+    - [  25.0,    20.35]
+    - [  30.0,    20.35]
+    - [  35.0,    20.46]
+    - [  40.0,    17.82]
+    - [  45.0,    13.04]
+    - [  50.0,    14.00]
+    - [  55.0,    16.05]
+    - [  60.0,    14.15]
+    - [  65.0,    11.72]
+    - [  70.0,     1.57]
+    - [  75.0,     0.00]
+    - [  80.0,     0.00]
+    - [  85.0,     7.63]
+    - [  90.0,    80.75]
+    - [  95.0,   110.00]
+    - [ 100.0,   164.31]
+    - [ 105.0,   162.44]
+    - [ 110.0,   162.91]
+    - [ 115.0,   164.74]
+    - [ 120.0,   115.82]
+    - [ 125.0,    21.56]
+    - [ 130.0,    27.94]
+    - [ 135.0,    33.24]
+    - [ 140.0,    37.62]
+    - [ 145.0,    41.60]
+    - [ 150.0,    63.58]
+    - [ 155.0,    60.69]
+    - [ 160.0,    87.91]
+    - [ 165.0,    90.15]
+    - [ 170.0,    89.95]
+    - [ 175.0,    90.17]
+    - [ 180.0,    91.58]
+    - [ 185.0,    91.59]
+    - [ 190.0,    91.25]
+    - [ 195.0,    91.37]
+    - [ 200.0,    89.69]
+    - [ 205.0,    87.60]
+    - [ 210.0,    81.45]
+    - [ 215.0,    78.19]
+    - [ 220.0,    73.12]
+    - [ 225.0,    61.86]
+    - [ 230.0,    60.01]
+    - [ 235.0,    55.79]
+    - [ 240.0,    46.97]
+    - [ 245.0,    41.06]
+    - [ 250.0,    43.31]
+    - [ 255.0,    45.15]
+    - [ 260.0,    42.41]
+    - [ 265.0,    40.37]
+    - [ 270.0,    38.87]
+    - [ 275.0,    37.97]
+    - [ 280.0,    38.56]
+    - [ 285.0,    35.73]
+    - [ 290.0,    25.04]
+    - [ 295.0,     9.94]
+    - [ 300.0,    12.25]
+    - [ 305.0,    14.05]
+    - [ 310.0,    16.52]
+    - [ 315.0,    32.17]
+    - [ 320.0,    34.85]
+    - [ 325.0,    56.12]
+    - [ 330.0,    57.93]
+    - [ 335.0,    61.69]
+    - [ 340.0,    63.31]
+    - [ 345.0,    63.75]
+    - [ 350.0,    67.21]
+    - [ 355.0,    77.69]
+    - [ 360.0,    75.07]
+    - [ 365.0,    73.30]
+    - [ 370.0,    76.12]
+    - [ 375.0,    80.47]
+    - [ 380.0,    81.27]
+    - [ 385.0,    77.21]
+    - [ 390.0,    73.64]
+    - [ 395.0,    63.84]
+    - [ 400.0,    62.69]
+    - [ 405.0,    64.67]
+    - [ 410.0,    66.01]
+    - [ 415.0,    66.34]
+    - [ 420.0,    66.11]
+    - [ 425.0,    65.95]
+    - [ 430.0,    65.27]
+    - [ 435.0,    61.06]
+    - [ 440.0,    59.32]
+    - [ 445.0,    58.63]
+    - [ 450.0,    58.24]
+    - [ 455.0,    57.64]
+    - [ 460.0,    56.80]
+    - [ 465.0,    48.45]
+    - [ 470.0,    61.94]
+    - [ 475.0,    59.49]
+    - [ 480.0,    61.12]
+    - [ 485.0,    29.23]
+    - [ 490.0,    11.46]
+    - [ 495.0,    25.39]
+    - [ 500.0,    38.32]
+    - [ 505.0,    50.87]
+    - [ 510.0,    57.05]
+    - [ 515.0,    57.42]
+    - [ 520.0,    56.48]
+    - [ 525.0,    58.49]
+    - [ 530.0,    63.91]
+    - [ 535.0,    66.89]
+    - [ 540.0,    24.10]
+    - [ 545.0,    64.97]
+    - [ 550.0,    73.42]
+    - [ 555.0,    69.69]
+    - [ 560.0,    69.32]
+    - [ 565.0,    68.52]
+    - [ 570.0,    16.34]
+    - [ 575.0,    23.12]
+    - [ 580.0,    43.20]
+    - [ 585.0,    45.62]
+    - [ 590.0,    50.13]
+    - [ 595.0,    52.41]
+    - [ 600.0,    29.68]
+    - [ 605.0,    17.19]
+    - [ 610.0,    17.64]
+    - [ 615.0,    21.42]
+    - [ 620.0,    48.92]
+    - [ 625.0,    51.24]
+    - [ 630.0,    50.21]
+    - [ 635.0,    48.59]
+    - [ 640.0,    61.01]
+    - [ 645.0,    60.91]
+    - [ 650.0,    56.97]
+    - [ 655.0,    54.63]
+    - [ 660.0,    54.50]
+    - [ 665.0,    34.51]
+    - [ 670.0,    24.87]
+    - [ 675.0,     0.00]
+    - [ 680.0,     9.18]
+    - [ 685.0,    14.66]
+    - [ 690.0,    18.35]
+    - [ 695.0,    25.17]
+    - [ 700.0,    18.48]
+    - [ 705.0,    29.20]
+    - [ 710.0,    30.74]
+
+  # Not used with kind_aerodynamic_model: constant, kept so that the case can be
+  # switched over to a table without editing the path settings
+  directory_path_specify: manual # default or manual
+  directory_aerodynamic: database/aerodynamic
+  filename_aerodynamic: aerodynamic.txt
+
+initial_settings:
+  # Initial conditions at the first point of table I (29 968 s from lift-off)
+  # Initial coordinate, 1:Long.(deg) 2: Lat.(deg), 3:Alt.(km)
+  # --The table gives no ground track. The entry point is the reported splashdown
+  #   point (30 deg. 06' N, 172 deg. 32' W) walked back 3620 km along the great
+  #   circle of 32.6 deg. inclination that passes through it; that is the integral
+  #   of the tabulated ground speed plus the descent under the parachutes.
+  coordinate:
+    - 153.932
+    - 18.467
+    - 123.4794
+  # [East, North, Up] in the local geocentric horizon, m/s
+  # --|V| = 10733.84 m/s (table I), flight-path angle -7.129 deg. (a quadratic
+  #   through the first three points of the table), azimuth 62.65 deg. (the great
+  #   circle above). Table I gives the velocity relative to the atmosphere, which
+  #   is what this section sets.
+  velocity:
+    - 9460.27
+    - 4893.27
+    - -1332.11
+  density_factor:
+    - 1.0
+
+
+planet:
+  # Gravitational constant, M.m2/kg2
+  gravitational_constant: 6.67408e-11
+  # Planet mass (Earth), kg
+  mass: 5.9723662e+24
+  # Planet radius on Equator, m
+  radius: 6.3781370e+6
+  # Ellipticity
+  ellipticity: 3.35281066474e-3
+  # Rotation rate, rad/s
+  rotation_rate: 7.292115e-5
+  # Dynamic form factor (J2) for potential calculation
+  potential_factor:
+    J2: 1.082629e-3
+    J22: -1.81222e-6
+    J3: -2.5356e-6
+    J4: -1.62336e-6
+    Lambda22: -14.545   # Degree
+
+
+epoch:
+  # Absolute time of the initial condition (UTC)
+  # --Lift-off was 1967-11-09 12:00:01 UTC and table I counts seconds from there,
+  #   so the first point is at 20:19:29 UTC. Nothing in this case depends on the
+  #   epoch (the wind is off); it is here to record when the state vector applies
+  #   and to tie the case to the atmosphere table, which was generated for it.
+  flag_epoch: True
+  datetime: '1967-11-09T20:19:29Z'
+
+
+atmosphere:
+  # Atmosphere model
+  # --constant, or fileread
+  kind_atmosphere_model: fileread
+
+  # Atmosphere model: constant settings
+  # Densitry, kg/m3
+  density: 1.e-3
+  # Temperature, K
+  temperature: 300.0
+
+  # Atmosphere model: file input
+  # --NRLMSISE-00 at the entry point and the entry time, generated by
+  #   database/atmosphere/generate_atmosphere_table.py. F10.7 = F10.7A = 150,
+  #   Ap = 4 (the indices of the day were not available offline).
+  directory_path_specify: manual # default or manual
+  directory_atmosphere: database/atmosphere
+  filename_atmosphere: atmospheremodel_apollo4.txt
+
+
+wind:
+  # No wind: the atmosphere co-rotates with the Earth, as table I assumes when it
+  # reports a "relative velocity".
+  flag_wind: False
+  kind_wind_model: constant
+  velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+  velocity_factor:
+    - 1.0
+
+
+time_integration:
+  # Time marching scheme
+  # --"runge_kutta", "explicit_euler"
+  kind_time_scheme: runge_kutta
+
+  # Constant timestep, s
+  # --The deceleration peaks at about 7 g within a few seconds; 0.05 s resolves it
+  #   with room to spare (the step study is in README.md).
+  timestep_constant: 0.05
+
+
+restart_process:
+  # Output directory
+  directory_output: output_restart
+
+  # Time series
+  # --True: stored individually as time series, False: stored by overwriting
+  flag_time_series: False
+
+  # Digid for step
+  digid_step: 4
+
+  # Restart step for reading
+  restart_step: 500
+
+  # Restart file name (output)
+  file_restart: restart.dat
+
+  # Output frequency
+  frequency_output: 1
+
+
+post_process:
+  # Output directory
+  directory_output: output_result_lift
+
+  # Output (KML)
+  kml:
+    flag_output: True
+    filename_output: geodetic.kml
+    linestyle_color: simplekml.Color.white
+    linestyle_width: 4
+    extrude: 1
+    frequency_output: 200
+
+  # Output (Tecplot)
+  tecplot:
+    flag_output: True
+    filename_output: tecplot.dat
+    # --One line per second of flight
+    frequency_output: 20

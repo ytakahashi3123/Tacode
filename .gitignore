@@ -41,6 +41,9 @@ tutorial/*/attitude.png
 tutorial/work_reentry_wind_table/output_result/
 tutorial/work_reentry_wind_table/output_restart/
 
+# Validation runs (the cases are reproducible; their numbers are recorded in the READMEs)
+validation/*/output_*/
+
 # Editor / OS
 *.swp
 *~
