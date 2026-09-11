@@ -7,7 +7,7 @@ import unittest
 
 import numpy as np
 
-from context import load_config, quiet
+from context import ROOT_DIR, load_config, quiet
 
 import atmosphere.atmosphere as atmosphere
 import satellite.satellite as satellite
@@ -668,6 +668,50 @@ class TestConstantAerodynamicModel(unittest.TestCase):
         with quiet():
             aerodynamic_dict = satellite.initial_settings_satellite(config)
         self.assertIn(satellite.KEY_INTERP, aerodynamic_dict)
+
+
+class TestGeneratedAtmosphereTable(unittest.TestCase):
+    """
+    database/atmosphere/generate_atmosphere_table.py が書いた表を読めること。
+
+    生成器は CCMC(VITMO) 形式で書く。読み取り側とずれると検証ケースが黙って
+    別の大気で走るので、同梱の生成物（Apollo 4 の検証ケースの表）で往復を見る。
+    """
+
+    TABLE_DIRECTORY = os.path.join(ROOT_DIR, 'validation', 'apollo4', 'database', 'atmosphere')
+    TABLE_FILENAME = 'atmospheremodel_apollo4.txt'
+
+    @classmethod
+    def setUpClass(cls):
+        config = load_config()
+        config['atmosphere']['directory_path_specify'] = 'manual'
+        config['atmosphere']['directory_atmosphere'] = cls.TABLE_DIRECTORY
+        config['atmosphere']['filename_atmosphere'] = cls.TABLE_FILENAME
+        with quiet():
+            cls.atmosphere_dict = atmosphere.initial_settings_atmosphere(config)
+
+    def test_the_format_is_detected_as_ccmc(self):
+        path = os.path.join(self.TABLE_DIRECTORY, self.TABLE_FILENAME)
+        with open(path) as f:
+            lines = [line.strip() for line in f.readlines()]
+        self.assertEqual(atmosphere.detect_atmosphere_file_kind(lines, path),
+                         atmosphere.KIND_FILE_CCMC)
+
+    def test_it_covers_the_entry_altitudes(self):
+        altitude = self.atmosphere_dict[atmosphere.KEY_Height]
+        self.assertLessEqual(altitude[0], 0.0)
+        self.assertGreaterEqual(altitude[-1], 123.5)
+
+    def test_the_density_decreases_with_altitude(self):
+        density = self.atmosphere_dict[atmosphere.KEY_Mass_density]
+        self.assertTrue(np.all(np.diff(density) < 0.0))
+
+    def test_every_property_is_finite_and_positive(self):
+        for key in (atmosphere.KEY_Mass_density, atmosphere.KEY_Temperature_neutral,
+                    atmosphere.KEY_KN):
+            value = self.atmosphere_dict[key]
+            self.assertTrue(np.all(np.isfinite(value)), key)
+            self.assertTrue(np.all(value > 0.0), key)
 
 
 
