@@ -165,19 +165,14 @@ wind:
 time_integration:
   # Time integration settings
 
-  # Time marching scheme: 
-  # --"explicit_euler", "implicit_lusgs"
+  # Time marching scheme:
+  # --"runge_kutta": 4-stage 4th-order Runge-Kutta (recommended)
+  # --"explicit_euler": 1st-order explicit Euler
   kind_time_scheme: runge_kutta
   #kind_time_scheme: explicit_euler
 
-  # constant timestep (s) for innerr loop in usteady computation
-  # valid when kind_time_determine: dt
+  # Constant timestep (s)
   timestep_constant: 1.0
-
-  # Temporal accuracy using LUSGS unsteady simulation
-  # --2nd_backward_diff or 1st_backward_diff
-  kind_backward_difference: 2nd_backward_diff
-  #kind_backward_difference: 1st_backward_diff
 
 
 restart_process:
@@ -208,6 +203,9 @@ post_process:
   directory_output: output_result
 
   # Output (GPX)
+  # NOTE: the GPX writer is currently not called from output_routine
+  #       (the call is commented out in output_gpsdata.py). Enabling it
+  #       requires the optional gpxpy package.
   flag_output_gpx: True
   filename_output_gpx: geodetic.gpx
 
