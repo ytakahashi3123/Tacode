@@ -9,6 +9,7 @@ and interpolates them in the angle of attack as well.
 |---|---|---|---|
 | `aerodynamic.txt` | 0° only | 0.203 – 4.35e4 | DSMC + CFD of the EGG re-entry capsule |
 | `aerodynamic_spherecone_aoa.txt` | 0–180°, every 10° | 1e-4 – 1e5 | analytic sphere-cone model, see below |
+| `aerodynamic_apollo_aoa.txt` | 0–180°, every 5° | 1e-4 – 1e5 | the same model over the Apollo command module, see below |
 
 `aerodynamic.txt` is the default used by `tutorial/work`, `tutorial/work_reentry` and
 `tutorial_template`, and it is what the committed reference outputs were produced with.
@@ -117,3 +118,39 @@ Known limitations of the model, which matter if you compare against real data:
   drag is the pressure contribution only.
 * The dynamic damping derivatives are not part of this model at all. They are given
   separately in `config.yml` (`attitude.damping_coefficient`).
+
+## `aerodynamic_apollo_aoa.txt`
+
+The same panel model over the profile of the Apollo command module, written for the
+validation case in `validation/apollo4`:
+
+```
+python3 generate_aerodynamic_table.py --shape capsule --angle-step 5 -o aerodynamic_apollo_aoa.txt
+```
+
+The geometry is the published one: 154 in. (3.9116 m) maximum diameter, 4.6939 m
+spherical heat shield, 0.1956 m corner radius and a 32.5° afterbody half-angle. **The
+vehicle flies heat-shield forward**, so the body x axis points out of the heat shield and
+the angle of attack is measured from it. The moment reference point is the apex of the
+heat shield, **on the axis**, and the reference area and length are π/4 · 3.9116² m² and
+3.9116 m.
+
+The table is therefore axisymmetric and has no trim of its own. The command module trims
+because its centre of gravity is off the axis; that offset lives in the configuration
+(`attitude.center_of_gravity`), and the solver moves the moment to it. In
+`validation/apollo4/config_6dof.yml` the offset is the **measured** 0.16688 m (6.57 in.,
+NASA TN D-5399 table II), which trims this table at 25.65° against the 24.4° of the
+flight report. Solving the offset from the table instead would give 0.1583 m; the
+measured value is used so that nothing in the case is fitted to the answer.
+
+How good the model is, measured against NASA TN D-6725 table I (trim values at M > 29.5):
+
+| | this table at 24.4° | flight report |
+|---|---|---|
+| `CD` | 1.266 | 1.2891 |
+| `L/D` | 0.373 | 0.301 |
+
+The drag is within 2 %; the lift-to-drag ratio is 24 % high, which is what modified
+Newtonian usually does on a blunt body — it puts no base pressure and no viscous force on
+the afterbody. The consequence for the trajectory is worked out in
+`validation/apollo4/README.md`.

@@ -439,6 +439,32 @@ class TestAxisymmetryOfTheAerodynamicTable(unittest.TestCase):
         self.assertEqual(satellite.check_axisymmetry(aerodynamic_dict), [])
         self.assertGreater(np.abs(aerodynamic_dict[satellite.KEY_CM][:,:,1]).max(), 0.0)
 
+    def test_the_shipped_apollo_table_is_axisymmetric_and_statically_stable(self):
+        """
+        検証ケースのアポロ表（修正ニュートン流）。回転体なので厳密に軸対称で、
+        軸上の基準点まわりでは迎角を増やすと頭上げ（Cm > 0）になる。
+        機首下げのモーメントは重心を軸から外して初めて立つ（config の
+        attitude.center_of_gravity）ので、この表そのものは静不安定に見えてよい。
+        """
+        config = load_config()
+        config['satellite']['directory_path_specify'] = 'default'
+        config['satellite']['filename_aerodynamic'] = 'aerodynamic_apollo_aoa.txt'
+        with quiet():
+            aerodynamic_dict = satellite.initial_settings_satellite(config)
+
+        self.assertEqual(satellite.check_axisymmetry(aerodynamic_dict), [])
+
+        # 迎角 0 では横流れが無いので Cm = 0、迎角が付くと軸上基準点まわりの Cm が立つ
+        force_zero, moment_zero = satellite.get_aerodynamic_coefficient_attitude(1.e-4, 0.0, aerodynamic_dict)
+        force_trim, moment_trim = satellite.get_aerodynamic_coefficient_attitude(1.e-4, 24.4, aerodynamic_dict)
+        self.assertAlmostEqual(float(moment_zero[1]), 0.0, places=12)
+        self.assertLess(float(moment_trim[1]), 0.0)
+
+        # 連続流の軸力は公表されているトリム時の CD に近い（1.2891, NASA TN D-6725）
+        angle = 24.4*np.pi/180.0
+        drag = float(force_trim[0])*np.cos(angle) + float(force_trim[2])*np.sin(angle)
+        self.assertAlmostEqual(drag, 1.2891, delta=0.05)
+
     def test_the_shipped_egg_table_is_flagged_for_its_moments(self):
         """
         3 自由度用の EGG の表（DSMC+CFD）は計測のばらつきで CMx と CMz が残っている。
