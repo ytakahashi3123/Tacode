@@ -83,6 +83,35 @@ class TestTecplotReader(unittest.TestCase):
         self.assertEqual(tecplot_reader.position_array(data).shape[1], 3)
         self.assertEqual(tecplot_reader.velocity_geocentric_array(data).shape[1], 3)
 
+    def test_a_file_of_several_zones_stops_the_program(self):
+        """
+        モンテカルロのまとめ出力（1 ケース = 1 ゾーン）を 1 本の軌跡として読むと、
+        別ケースの行が繋がって終端点が「最後のケースの最後の点」になる。
+        黙って繋げずに止めること。
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, 'gathered.dat')
+            with open(path, 'w') as f:
+                f.write('Variables = Time[s],Alti[km]\n')
+                f.write('zone t="case0001" i= 2 f=point\n')
+                f.write('0.0 100.0\n1.0 90.0\n')
+                f.write('zone t="case0002" i= 3 f=point\n')
+                f.write('0.0 100.0\n1.0 80.0\n2.0 70.0\n')
+            with self.assertRaises(SystemExit):
+                tecplot_reader.read_tecplot(path)
+
+            zone_list = tecplot_reader.read_tecplot_zone(path)
+            self.assertEqual(len(zone_list), 2)
+            self.assertEqual(len(zone_list[0]['Time']), 2)
+            self.assertEqual(len(zone_list[1]['Time']), 3)
+            self.assertEqual(zone_list[1]['Alti'][-1], 70.0)
+
+    def test_a_single_zone_file_is_read_as_one_zone(self):
+        zone_list = tecplot_reader.read_tecplot_zone(TECPLOT_3DOF)
+        self.assertEqual(len(zone_list), 1)
+        np.testing.assert_array_equal(zone_list[0]['Time'],
+                                      tecplot_reader.read_tecplot(TECPLOT_3DOF)['Time'])
+
     def test_a_missing_file_stops_the_program(self):
         with self.assertRaises(SystemExit):
             tecplot_reader.read_tecplot(os.path.join(ROOT_DIR, 'no_such_file.dat'))

@@ -22,6 +22,7 @@
 import argparse
 import csv
 import glob
+import re
 import os
 import sys
 
@@ -53,14 +54,21 @@ NAME_CONTROL_DEFAULT = 'config.yml'
 
 def find_case_directory(directory):
   #
-  # <directory> の直下から、テンプレート以外のケースディレクトリを名前順に集める。
+  # <directory> の直下から、ケースディレクトリを名前順に集める。
+  #
+  # ケースの名前は montecarlo.get_case_directory が作る「<case_dir> + 4 桁」なので、
+  # **末尾が 4 桁の数字のディレクトリだけ**を採る。「テンプレート以外の全部」だと、
+  # 作業ディレクトリの中に置いた結果ディレクトリなどもケースとして数えてしまう。
   #
   path_list = sorted(glob.glob(os.path.join(directory, '*')))
   case_list = []
   for path in path_list :
     if not os.path.isdir(path) :
       continue
-    if os.path.basename(path).endswith(SUFFIX_TEMPLATE) :
+    name = os.path.basename(path)
+    if name.endswith(SUFFIX_TEMPLATE) :
+      continue
+    if re.search(r'\d{4}$', name) is None :
       continue
     case_list.append(path)
   return case_list

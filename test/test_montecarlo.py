@@ -333,6 +333,27 @@ class TestTheWindMonteCarloTutorial(unittest.TestCase):
             self.assertIn('WindE[m/s]', text)
 
 
+class TestFindingTheCaseDirectories(unittest.TestCase):
+    """
+    `montecarlo_dispersion.find_case_directory` が拾うのはケースだけであること。
+
+    ケースの名前は montecarlo.get_case_directory が作る「<case_dir> + 4 桁」。
+    「テンプレート以外の全部」で拾うと、作業ディレクトリに置いた結果ディレクトリまで
+    ケースとして数え、統計の母数が変わる。
+    """
+
+    def test_only_the_numbered_directories_are_taken(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for name in ('case0001', 'case0002', 'case_template', 'result_tacode', 'figure'):
+                os.makedirs(os.path.join(directory, name))
+            with open(os.path.join(directory, 'case0003'), 'w') as f:
+                f.write('a file, not a directory\n')
+
+            case_list = [os.path.basename(path)
+                         for path in montecarlo_dispersion.find_case_directory(directory)]
+            self.assertEqual(case_list, ['case0001', 'case0002'])
+
+
 class TestDetectingCasesWhichFail(unittest.TestCase):
     """
     ケースが落ちたことを親が検知すること。
