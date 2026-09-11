@@ -35,6 +35,13 @@ FLOOR_AXISYMMETRY     = 1.e-12
 
 def initial_settings_satellite(config):
 
+  # kind_aerodynamic_model: constant は係数表を使わない（solver は config の
+  # drag_coefficient を読む）。それでも表を読みに行くと、使いもしないファイルが
+  # 無いだけで計算が止まる
+  if config['satellite']['kind_aerodynamic_model'] == 'constant' :
+    print('Aerodynamic model: constant. The coefficient table is not read.')
+    return {}
+
   aerodynamic_dict = read_aerodynamic_file(config)
 
   aerodynamic_dict = set_interpolator(aerodynamic_dict)

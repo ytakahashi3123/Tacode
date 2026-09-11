@@ -646,6 +646,30 @@ class TestFileFormats(unittest.TestCase):
                     atmosphere.read_atmosphere_file(self._config_for(directory))
 
 
+class TestConstantAerodynamicModel(unittest.TestCase):
+    """
+    kind_aerodynamic_model: constant は係数表を使わない。
+
+    solver は config の drag_coefficient を読むので、表を読みに行くと、
+    使いもしないファイルが無いだけで計算が止まる。
+    """
+
+    def test_the_table_is_not_read(self):
+        config = load_config()
+        config['satellite']['kind_aerodynamic_model'] = 'constant'
+        config['satellite']['filename_aerodynamic'] = 'no_such_table.txt'
+        with quiet():
+            aerodynamic_dict = satellite.initial_settings_satellite(config)
+        self.assertEqual(aerodynamic_dict, {})
+
+    def test_the_table_is_still_read_for_fileread(self):
+        config = load_config()
+        self.assertEqual(config['satellite']['kind_aerodynamic_model'], 'fileread')
+        with quiet():
+            aerodynamic_dict = satellite.initial_settings_satellite(config)
+        self.assertIn(satellite.KEY_INTERP, aerodynamic_dict)
+
+
 
 if __name__ == '__main__':
     unittest.main()
