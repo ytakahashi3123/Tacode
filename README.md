@@ -12,7 +12,7 @@ The gravity force is obtained by differentiating the gravitational potential con
 The atmospheric data is given by NRLMSISE-00 Atmosphere Model.
 The equation of motion is numerically solved using fourth-order Runge-Kutta method in four stages.
 
-By default the object is a point mass with **three degrees of freedom**, and the aerodynamic force is the drag along the direction of motion, given by atmospheric density, drag coefficient, characteristic (projection) area, and velocity.
+By default the object is a point mass with **three degrees of freedom**, and the aerodynamic force is the drag along the direction of motion, given by atmospheric density, drag coefficient, characteristic (projection) area, and velocity. A lift perpendicular to it, at a constant bank angle, can be added with `satellite.lift_coefficient`; it is off by default.
 
 Since v2.3.0 the attitude can be solved as well, giving **six degrees of freedom**. The rigid body then rotates under the aerodynamic, damping and gravity-gradient moments, and the aerodynamic force follows the attitude through the angle of attack, so that the trajectory and the attitude are coupled in both directions. The attitude is carried by a quaternion, and the aerodynamic coefficients are interpolated from a table in the angle of attack as well as in the Knudsen number.
 The attitude is switched off unless `attitude.flag_attitude` is set, and a configuration without an `attitude` section reproduces the earlier three-degree-of-freedom results bit for bit.
@@ -152,6 +152,33 @@ be a drag along the direction of motion:
 where $C_D$ is the drag coefficient and $S$ is the characteristic (projected) area. The
 drag coefficient is either a constant or interpolated from the aerodynamic table against
 the Knudsen number.
+
+A **lift** may be added to it, which is what a blunt lifting body such as a re-entry capsule
+flies with. It is perpendicular to the velocity, and its direction in that plane is set by
+the bank angle $\sigma$:
+
+```math
+	{\boldsymbol F}_{\rm lift} = q_{\infty} C_L S \left( \cos\sigma \, \hat{\boldsymbol n}_u + \sin\sigma \, \hat{\boldsymbol n}_r \right) ,
+	\qquad
+	\hat{\boldsymbol n}_u = \frac{ \hat{\boldsymbol u} - ( \hat{\boldsymbol u} \cdot \hat{\boldsymbol v} ) \hat{\boldsymbol v} }{ \left| \cdots \right| } ,
+	\qquad
+	\hat{\boldsymbol n}_r = \hat{\boldsymbol v} \times \hat{\boldsymbol n}_u ,
+```
+
+where $`\hat{\boldsymbol u} = {\boldsymbol x}/|{\boldsymbol x}|`$ is the local vertical
+(geocentric, the frame the initial velocity and the wind already use). So $\sigma = 0$ is
+lift up, $\sigma = 90^\circ$ is lift to the right of the flight direction and
+$\sigma = 180^\circ$ is lift down; the bank angle is not modulated during a run. Both
+`satellite.lift_coefficient` and `satellite.bank_angle` default to zero, and with
+$C_L = 0$ the term is not evaluated at all, so a configuration without them reproduces the
+earlier results bit for bit. In six degrees of freedom the lift comes out of the attitude
+and the table instead, and these two settings are not used.
+
+The bank angle may also be given as a **table against time**,
+`satellite.bank_angle_table`, a list of `[time, angle]` pairs which is interpolated
+linearly and clamped outside its range; each Runge-Kutta stage reads it at its own time,
+as the wind is read. That is how a measured roll history is flown — Tacode has no
+guidance law of its own — and `validation/apollo10` does exactly that.
 
 **In six degrees of freedom** the force is read from the aerodynamic table in body axes as
 a function of the total angle of attack as well as of the Knudsen number. Writing
@@ -785,20 +812,21 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | Module | What it checks |
 |---|---|
 | `test_coordinate_system.py` | Round trips between the Cartesian, geodetic and polar systems; behaviour at longitude 180 deg, at the poles and on the equator |
-| `test_force_term.py` | The gravity vector equals `-grad U` for a potential written independently from the README; the Coriolis, centrifugal and drag terms |
+| `test_force_term.py` | The gravity vector equals `-grad U` for a potential written independently from the README; the Coriolis, centrifugal and drag terms; the lift is perpendicular to the air-relative velocity, has the magnitude the coefficient asks for, turns about the velocity with the bank angle, and is not evaluated at all when `lift_coefficient` is absent or zero. The bank table is interpolated and clamped, wins over the constant, and stops the run when malformed; through the solver, a constant table reproduces the scalar bank bit for bit, lift up raises the trajectory and lift down lowers it, and a table which switches lands between the two |
 | `test_kepler.py` | Energy and angular momentum are conserved in the two-body limit (J terms, rotation and drag switched off); RK4 converges at fourth order |
-| `test_atmosphere.py` | Table interpolation reproduces the nodes, clamps outside the table range, and scales the Knudsen number with the characteristic length; the aerodynamic table is read in both formats, and its axisymmetry is checked so that a table a 6-DOF run cannot represent is reported rather than used silently |
+| `test_atmosphere.py` | Table interpolation reproduces the nodes, clamps outside the table range, and scales the Knudsen number with the characteristic length; the aerodynamic table is read in both formats, and its axisymmetry is checked so that a table a 6-DOF run cannot represent is reported rather than used silently; `kind_aerodynamic_model: constant` does not read the table at all, and a table written by `database/atmosphere/generate_atmosphere_table.py` is read back |
+| `test_database_path.py` | The path of the atmosphere, aerodynamic and wind tables: `default` and `auto` resolve to the master under `database/`, `manual` is taken as given, a misspelt `directory_path_specify` stops the run instead of falling back, `manual` without its directory key stops as well, and the copy of every table in a case directory is identical to the master |
 | `test_solver_invariants.py` | The time loop stops at the requested time, all history arrays share one length, the atmospheric values line up with the position of the same index, and the Tecplot header matches the number of rows |
 | `test_attitude.py` | Quaternion, Euler-angle and local-horizon conversions round trip and agree with analytic rotations and with the frame the initial velocity already uses; the quaternion kinematics reproduce a constant-rate rotation and drop the Earth rate |
 | `test_moment_term.py` | Torque-free motion conserves the angular momentum and the energy, an axisymmetric body precesses at the analytic rate, the gravity-gradient torque matches its closed form and vanishes for an isotropic body, and the damping term removes rotational energy |
 | `test_solver_attitude.py` | A 6-DOF run keeps the state arrays aligned with the trajectory, the pitch oscillation matches its analytic period, planar motion stays planar, damping shrinks the amplitude, and the aerodynamic force at zero incidence equals the 3-DOF drag |
 | `test_regression_3dof.py` | With the attitude switched off, both tutorial cases reproduce the reference outputs committed in `tutorial/`, and a configuration carrying an `attitude` section set to `False` gives exactly the same trajectory as one without the section |
-| `test_montecarlo.py` | The Monte-Carlo driver rewrites the right line of the control file: the section tells `wind.velocity` apart from `initial_settings.velocity`, lines that happen to hold the same value are not rewritten together, the search is closed at the end of the section so that a key of another section is never rewritten, and a missing section, a missing key or a key which is not a list stops the run. A case which exits with a non-zero code or writes no result file is counted, and the run stops with a non-zero exit code unless `flag_allow_failure` is set. The wind tutorial and its template agree with each other, and two shortened cases actually run and come out different. The postprocess gathers the cases into one Tecplot file: one zone per case with its own point count, the template left out, a case without a result skipped, and cases whose columns disagree stopping the run. The animation helper is checked on its geometry — the offsets from the reference at the same time, the window that holds every point, the unwrapped longitude — and on actually writing a frame, a self-contained `.html` and the 3D view, which is skipped without matplotlib |
+| `test_montecarlo.py` | `montecarlo.random_seed` makes a run repeatable (the same seed gives the same dispersion, another seed does not, and no shipped configuration fixes a seed), the dispersion is multiplicative so a base value of zero stays put, and the case directories are found by their four-digit suffix. The driver rewrites the right line of the control file: the section tells `wind.velocity` apart from `initial_settings.velocity`, lines that happen to hold the same value are not rewritten together, the search is closed at the end of the section so that a key of another section is never rewritten, and a missing section, a missing key or a key which is not a list stops the run. A case which exits with a non-zero code or writes no result file is counted, and the run stops with a non-zero exit code unless `flag_allow_failure` is set. The wind tutorial and its template agree with each other, and two shortened cases actually run and come out different. The postprocess gathers the cases into one Tecplot file: one zone per case with its own point count, the template left out, a case without a result skipped, and cases whose columns disagree stopping the run. The animation helper is checked on its geometry — the offsets from the reference at the same time, the window that holds every point, the unwrapped longitude — and on actually writing a frame, a self-contained `.html` and the 3D view, which is skipped without matplotlib |
 | `test_helper_config.py` | The settings file of the post-processing tools: the order of precedence (command line, then the file, then the default), a list-valued option, a missing file being no error, and an unknown key, a malformed section or a missing required value stopping the run. `--save-config` writes what can be read back and keeps the other sections, all three tools read the file the same way, and the `config_helper.yml` shipped with the tutorials is accepted by the tool it belongs to |
-| `test_helper_visualization.py` | The post-processing tools in `src_helper/`: the Tecplot reader on both a 3-DOF and a 6-DOF output, the vehicle shapes (front distinguishable from back, roll visible), and the animation script writing an actual still, an `.html` animation as one self-contained file, and an `.mp4`. The drawing tests are skipped when matplotlib is not installed, and the `.mp4` one when `ffmpeg` is not |
+| `test_helper_visualization.py` | The post-processing tools in `src_helper/`: the Tecplot reader on both a 3-DOF and a 6-DOF output, a file of several zones being refused rather than joined into one trajectory (and taken apart by `read_tecplot_zone`), the vehicle shapes (front distinguishable from back, roll visible), and the animation script writing an actual still, an `.html` animation as one self-contained file, and an `.mp4`. The drawing tests are skipped when matplotlib is not installed, and the `.mp4` one when `ffmpeg` is not |
 | `test_attitude_verification.py` | Problems whose answer is known in closed form, solved by the production solver: the order of convergence, the Jacobi-elliptic solution of the torque-free asymmetric body, conservation of the angular momentum vector in inertial space, the precession of an axisymmetric body, the logarithmic decrement of a damped oscillation, the gravity-gradient libration frequency in a circular orbit, and the axisymmetry of the tabulated aerodynamics |
 | `test_regression_6dof.py` | The 6-DOF tutorial case, run for its full 1000 s, reproduces the `tecplot.dat`, `restart.dat` and `geodetic.kml` committed in `tutorial/work_reentry_6dof` |
-| `test_timestep_attitude.py` | The timestep itself: the `T/20` criterion the solver warns at is the first one whose numerical damping disappears, the order of convergence survives the atmosphere table, the angle-of-attack table is only C0 and costs the fourth order, and the shipped `dt = 0.05 s` is converged |
+| `test_timestep_attitude.py` | The timestep itself: the `T/20` criterion the solver warns at is the first one whose numerical damping disappears, the order of convergence survives the atmosphere table, the angle-of-attack table is only C0 and costs the fourth order, the shipped `dt = 0.05 s` is converged, and the check itself runs once per `INTERVAL_CHECK_TIMESTEP` rather than every step |
 | `test_epoch.py` | The absolute time: an ISO 8601 epoch is read from the configuration in every form PyYAML can hand over, the derived day of year, universal time and Julian date are right across a leap year and a year boundary, the Julian date agrees with `astropy` where it is installed, and the epoch stays off in every configuration shipped with the code |
 | `test_error_exit.py` | The exit code of an error path: no module in `src/` calls the built-in `exit()`, which returns 0 and hides a failure from the shell, the Monte-Carlo driver and CI, and a mistyped wind model, a wind velocity of the wrong length and a malformed epoch each stop with the code 1, both in process and when the solver is run as a child process |
 | `test_divergence.py` | The sanity check on the state: the limits are built from the initial state (ten times the geocentric distance, ten times the escape velocity) and follow the configuration, a state which is not finite - position, velocity, quaternion or angular velocity - stops the run, so does a distance or a speed beyond the limit, a state just inside them does not, a coarse time step which used to write a diverged trajectory and return 0 now stops with the code 1, the same run goes through with the check off, and a sound run is untouched |
@@ -823,6 +851,74 @@ request:
 | `unit` | The test suite on Python 3.9, 3.10, 3.11, 3.12 and 3.13 |
 | `tutorial` | The tutorial case end to end, through `run_tacode.sh`, and a check that a bad configuration exits with a non-zero code |
 | `setup-script` | `setup_env.sh` on a machine without the packages, then the suite using the `.venv` it built |
+
+## Validation against flight data
+
+`validation/` holds cases which put the code against measurements, as opposed to
+`tutorial/`, which shows how to run it, and `test/`, which checks it against exact
+solutions and its own reference outputs. They are **not** part of `run_tests.sh`: they
+are compared against flight data rather than against an exact answer, and their result
+is a write-up rather than a pass or a fail.
+
+| Case | Flight | Result |
+|---|---|---|
+| `validation/apollo4` | Apollo 4 (AS-501) entry, 1967-11-09 | with the vertical lift measured in flight, altitude within 0.5 km to the peak heating and 5.4 km rms over the whole entry; the atmosphere table within 4.3 % of the flight-derived density |
+| `validation/apollo10` | Apollo 10 (AS-505) entry, 1969-05-26 | **the bank angle measured in flight as the input**: altitude 3.2 km rms, inertial velocity 189 m/s rms over the whole entry |
+
+```console
+cd validation/apollo4
+./run_tacode.sh                            # drag only,   1.4 s
+./run_tacode.sh -file config_lift.yml      # with lift,   3.6 s
+./run_tacode.sh -file config_6dof.yml      # 6-DOF,      19 s
+python3 compare_apollo4.py                 # the numbers and the figures
+```
+
+Apollo 4 flew a lunar-return entry, and NASA TM X-58091 tabulates its altitude, relative
+velocity, free-stream density and heating through the whole of it. The case compares
+three things separately, because they fail in different ways:
+
+- **The trajectory.** Apollo 4 flew with lift, roll-modulated: it dipped to 55.6 km,
+  pulled back up to 73.5 km and only then came down. A drag-only run cannot produce that
+  at all — it descends monotonically and is a comparison only up to the peak heating 72 s
+  in, where it holds to 3.2 km and 194 m/s. **NASA TN D-5399 reports the vertical
+  lift-to-drag ratio derived from the flight itself**, and driving the case with it (and
+  nothing tuned) the run holds the flight to half a kilometre through the dive, the dip and
+  the pull-up — **0.4 km and 46 m/s over the first 72 s** — and to 5.4 km rms over the
+  whole 552 s, drifting low late in the entry where constant `CD` and `L/D` stop being
+  a good description.
+- **The same entry in six degrees of freedom**, where nothing is prescribed about the lift
+  or the trim: the capsule carries a modified-Newtonian table of its own shape and trims
+  at an angle of attack because its centre of gravity is offset from the axis by the
+  measured 0.16688 m. It trims at 25.65 deg. against the 24.4 deg. reported for the
+  flight, with `CD` and `L/D` within a few per cent of the flight-derived values, and
+  nothing adjusted.
+- **The atmosphere table**, evaluated at the flight altitudes so that the trajectory
+  cannot hide in it: the NRLMSISE-00 table generated for the date and the place of the
+  entry matches the flight-derived density to a mean ratio of 1.000 and an rms of 4.3 %
+  over 42 points and two and a half decades of density.
+- **The heating.** Stagnation-point correlations (Detra-Kemp-Riddell, Sutton-Graves) fed
+  with the density of the table land within a percent of the same correlations fed with
+  the flight density, which is what matters for the solver; the DKR value itself is
+  within 6 % of the flight measurement when the equivalent nose radius of the reference
+  (a 10-foot sphere at 24.4 deg. angle of attack) is used.
+
+Every assumption, every source and the sensitivity to the assumed mass, azimuth, time
+step and atmosphere table are written down in `validation/apollo4/README.md`.
+
+**`validation/apollo10` closes the gap the bank angle leaves open.** NASA TN D-6725
+reports the state vector at the entry interface, the roll angle the guidance held through
+the entry, and the altitude and velocity flown. The roll angle is the direction of the
+lift, so it goes in as an input (`satellite.bank_angle_table`, digitised from the figure
+by the script in the case directory) and the trajectory is the comparison: **3.2 km rms in
+altitude and 189 m/s rms in inertial velocity over the whole 414 s**, with nothing tuned.
+Switching the lift off costs 33 km rms, and a change of 0.03 in `CL` — the accuracy the
+report claims for its own L/D — costs two to three times the baseline error, which is
+where this case runs out of resolution.
+
+The atmosphere table of the case was written by
+`database/atmosphere/generate_atmosphere_table.py`, which calls NRLMSISE-00 through
+`pymsis` and writes the CCMC format the solver reads. `pymsis` is a dependency of that
+generator only, in the same way that the wind-table generator owns its data sources.
 
 ## Requirements
 
@@ -1059,6 +1155,16 @@ a table for a 6-DOF run and warns, naming the offending ones, rather than answer
 silently; see `database/aerodynamic/README.md` for the threshold. A genuinely
 non-axisymmetric vehicle needs both the table and the rotation extended to the sideslip
 angle.
+
+A body of revolution can still fly at an angle of attack, and that is how a re-entry
+capsule gets its lift: its centre of gravity sits off the axis, so the aerodynamic force
+has a moment arm about it. The table is written about a point **on the axis** and stays
+axisymmetric; `attitude.center_of_gravity` is the vector from that point to the centre of
+gravity, and the solver adds `(-r_cg) x F` to the moment. The trim angle follows from the
+table and the offset, and nothing else has to be told about the lift. The Apollo
+validation case is built this way, and
+`database/aerodynamic/generate_aerodynamic_table.py --shape capsule` writes a table for
+that shape.
 
 The angle of attack is measured against the ECEF velocity, that is, the atmosphere is
 assumed to co-rotate with the Earth. Winds are not modelled.
