@@ -42,7 +42,7 @@ class TestTheEpochIsOffByDefault(unittest.TestCase):
         from context import ROOT_DIR, load_config
 
         paths = sorted(glob.glob(os.path.join(ROOT_DIR, 'tutorial', '*', 'config.yml')))
-        paths.append(os.path.join(ROOT_DIR, 'tutorial_template', 'config.yml'))
+        paths.append(os.path.join(ROOT_DIR, 'tutorial', 'template', 'config.yml'))
         paths.append(os.path.join(ROOT_DIR, 'src', 'config.yml'))
         self.assertTrue(len(paths) >= 6)
         for path in paths:

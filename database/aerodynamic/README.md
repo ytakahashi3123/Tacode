@@ -12,7 +12,7 @@ and interpolates them in the angle of attack as well.
 | `aerodynamic_apollo_aoa.txt` | 0–180°, every 5° | 1e-4 – 1e5 | the same model over the Apollo command module, see below |
 
 `aerodynamic.txt` is the default used by `tutorial/work`, `tutorial/work_reentry` and
-`tutorial_template`, and it is what the committed reference outputs were produced with.
+`tutorial/template`, and it is what the committed reference outputs were produced with.
 It stays unchanged.
 
 This directory is the master copy. Each case directory keeps the table it actually uses

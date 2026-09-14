@@ -331,10 +331,10 @@ montecarlo:
   case_dir: case
   
   # Template path for Tacode work directory
-  # --default (or auto): <repo>/tutorial_template
+  # --default (or auto): <repo>/tutorial/template
   # --manual: template_path below
   template_path_specify: default # default or manual
-  template_path: ../../tutorial_template 
+  template_path: ../template 
 
   # Number of iteraction in Monte-Carlo routine
   number_iteration: 16

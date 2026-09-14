@@ -417,8 +417,9 @@ Tutorial cases:
 | `tutorial/work_montecarlo_wind` | the same entry with the wind switched on, scattered case by case |
 | `tutorial/work_reentry_wind_table` | the same entry flown through a real wind table (NCEP + HWM14) |
 
-`tutorial_template` is the template used to create a new case (copy it to a new directory),
-and `tutorial_template_wind` is the one the wind Monte-Carlo tutorial copies.
+`tutorial/template` is the template used to create a new case (copy it to a new
+directory), and `tutorial/template_wind` is the one the wind Monte-Carlo tutorial
+copies.
 
 Each case directory carries the tables it uses in its own `database` subdirectory, and
 `config.yml` points at them with a path relative to the current directory:
@@ -660,7 +661,7 @@ cd tutorial/work_montecarlo
 ```
 
 Tutorial case: `tutorial/work_montecarlo`.
-It copies `tutorial_template` for each case and runs them in parallel
+It copies `tutorial/template` for each case and runs them in parallel
 (`number_iteration` cases, up to `maximum_number_execution` at a time).
 
 Each entry of `montecarlo.target_variable` is `[variable, section, dispersion]`. The
@@ -715,7 +716,7 @@ python3 ../../src_helper/montecarlo_dispersion/montecarlo_dispersion.py work_mon
     --reference ../work_reentry/output_result/tecplot.dat
 ```
 
-Tutorial case: `tutorial/work_montecarlo_wind`, which copies `tutorial_template_wind`.
+Tutorial case: `tutorial/work_montecarlo_wind`, which copies `tutorial/template_wind`.
 The template is the entry of `tutorial/work_reentry` with the wind switched on: a uniform
 20 m/s east and 10 m/s north, scattered by +-50 % case by case. The vehicle of that case
 is light (`m/(CD A)` of about 9.8 kg/m2) and spends some 1000 s below 32 km, so the wind
@@ -785,7 +786,7 @@ control file and a table is selected by its file name. What can be scattered is
 ```
 
 Copy `tutorial/work_reentry_wind_table` to serve as the template (its `run_tacode.sh`
-takes the path of `src/` as `$1`, as `tutorial_template_wind/run_tacode.sh` does) and
+takes the path of `src/` as `$1`, as `tutorial/template_wind/run_tacode.sh` does) and
 point `montecarlo.template_path` at it. Scattering the merged NCEP+HWM14 field by +-20 %
 in this way moves the impact point by 10.1 km west and 7.8 km north on average — the
 nominal table, as it must be — with a standard deviation of 1.05 km east-west and 0.82 km
@@ -797,7 +798,7 @@ the field itself.
 ## Configuration file
 
 Trajectory simulation by `Tacode` is controled by the configuration file: `config.yml`.
-`tutorial_template/config.yml` carries every setting with a comment on what it does,
+`tutorial/template/config.yml` carries every setting with a comment on what it does,
 including the `attitude` section, which is present but switched off there.
 
 ## Tests

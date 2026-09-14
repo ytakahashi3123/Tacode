@@ -41,7 +41,7 @@ CONFIG_REENTRY = os.path.join(ROOT_DIR, 'tutorial', 'work_reentry', 'config.yml'
 # 持たない（回帰テストの対象外）
 CONFIG_WIND_ON = [os.path.join(ROOT_DIR, 'tutorial', 'work_montecarlo_wind', 'config.yml'),
                   os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_wind_table', 'config.yml'),
-                  os.path.join(ROOT_DIR, 'tutorial_template_wind', 'config.yml')]
+                  os.path.join(ROOT_DIR, 'tutorial', 'template_wind', 'config.yml')]
 
 
 def read_tecplot(path):
@@ -186,7 +186,7 @@ class TestTheWindIsOffByDefault(unittest.TestCase):
         # 風のモンテカルロのチュートリアル（CONFIG_WIND_ON）だけは意図して有効で、
         # そちらは参照出力を持たない
         paths = sorted(glob.glob(os.path.join(ROOT_DIR, 'tutorial', '*', 'config.yml')))
-        paths.append(os.path.join(ROOT_DIR, 'tutorial_template', 'config.yml'))
+        paths.append(os.path.join(ROOT_DIR, 'tutorial', 'template', 'config.yml'))
         paths.append(os.path.join(ROOT_DIR, 'src', 'config.yml'))
         paths = [path for path in paths if path not in CONFIG_WIND_ON]
         self.assertTrue(len(paths) >= 6)
@@ -388,8 +388,8 @@ class TestTheVelocityFactor(unittest.TestCase):
     def test_the_shipped_configs_leave_it_at_one(self):
         # 1.0 以外がまぎれ込むと、風を有効にしたケースの結果が黙って変わる
         paths = sorted(glob.glob(os.path.join(ROOT_DIR, 'tutorial', '*', 'config.yml')))
-        paths.append(os.path.join(ROOT_DIR, 'tutorial_template', 'config.yml'))
-        paths.append(os.path.join(ROOT_DIR, 'tutorial_template_wind', 'config.yml'))
+        paths.append(os.path.join(ROOT_DIR, 'tutorial', 'template', 'config.yml'))
+        paths.append(os.path.join(ROOT_DIR, 'tutorial', 'template_wind', 'config.yml'))
         paths.append(os.path.join(ROOT_DIR, 'src', 'config.yml'))
         self.assertTrue(len(paths) >= 7)
         for path in paths:

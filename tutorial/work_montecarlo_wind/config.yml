@@ -237,10 +237,10 @@ montecarlo:
 
   # Template path for Tacode work directory
   # --manual: template_path below, relative to the current directory
-  # --default (or auto): <repo>/tutorial_template, resolved from the location of
+  # --default (or auto): <repo>/tutorial/template, resolved from the location of
   #   montecarlo.py, independent of the current directory
   template_path_specify: manual # default or manual
-  template_path: ../../tutorial_template_wind
+  template_path: ../template_wind
 
   # Target variables to be changed in the Monte Carlo routine
   # --[variable name, section name, dispersion]

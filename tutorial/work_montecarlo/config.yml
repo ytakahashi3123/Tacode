@@ -239,7 +239,7 @@ montecarlo:
   
   # Template path for Tacode work directory
   template_path_specify: default # default or manual
-  template_path: ../../tutorial_template 
+  template_path: ../template 
 
   # Target variables to be changed in the Monte Carlo routine
   target_variable:

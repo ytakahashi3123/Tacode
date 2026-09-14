@@ -9,7 +9,7 @@
      （initial_settings.velocity と wind.velocity）、セクションで絞れないと
      風のつもりで初期速度を動かしてしまう。値の同じ行が並ぶとき（[0.0, 0.0, 0.0]）に
      巻き添えで一緒に書き換わらないことも見る
-  2. 風のチュートリアル（tutorial/work_montecarlo_wind と tutorial_template_wind）が
+  2. 風のチュートリアル（tutorial/work_montecarlo_wind と tutorial/template_wind）が
      互いに整合していること。ばらつかせる基準値はモンテカルロ側の config から読まれ、
      書き換えられるのはテンプレート側の行なので、両者がずれていると黙って別の値で走る
   3. 短くしたケースを実際に 2 つ走らせ、ケースごとに違う風で違う軌道が出ること
@@ -54,7 +54,7 @@ if ANIMATION_DIR not in sys.path:
 import montecarlo_animation  # noqa: E402
 
 CONFIG_MONTECARLO_WIND = os.path.join(ROOT_DIR, 'tutorial', 'work_montecarlo_wind', 'config.yml')
-TEMPLATE_WIND = os.path.join(ROOT_DIR, 'tutorial_template_wind')
+TEMPLATE_WIND = os.path.join(ROOT_DIR, 'tutorial', 'template_wind')
 CONFIG_TEMPLATE_WIND = os.path.join(TEMPLATE_WIND, 'config.yml')
 
 

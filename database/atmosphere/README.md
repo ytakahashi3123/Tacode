@@ -10,7 +10,7 @@ other setting has to change.
 | `atmospheremodel_700km.txt` | 0–700 km, 1 km | NRLMSISE-00 Fortran | mean of 88 points, 50°S–50°N × 0–315°E | IDAY 0, 00:00 UT, F10.7 = F10.7A = 76.6, Ap = 8.4 7.0 5.0 4.0 3.0 3.9 6.8 |
 
 `atmospheremodel.txt` is the default used by every case in `tutorial/` and
-`tutorial_template/`. It is kept unchanged as the reference table.
+`tutorial/template/`. It is kept unchanged as the reference table.
 
 This directory is the master copy. Each case directory keeps the table it actually uses
 in `<case>/database/atmosphere` and reads it from there, so to run a case against
