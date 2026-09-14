@@ -867,6 +867,7 @@ is a write-up rather than a pass or a fail.
 |---|---|---|
 | `validation/apollo4` | Apollo 4 (AS-501) entry, 1967-11-09 | with the vertical lift measured in flight, altitude within 0.5 km to the peak heating and 5.4 km rms over the whole entry; the atmosphere table within 4.3 % of the flight-derived density |
 | `validation/apollo10` | Apollo 10 (AS-505) entry, 1969-05-26 | **the bank angle measured in flight as the input**: altitude 3.2 km rms, inertial velocity 189 m/s rms over the whole entry |
+| `validation/fire2` | Project Fire flight II entry, 1965-05-22 | **the attitude**, on an uncontrolled spin-stabilised body: the pitch-yaw oscillation within 5 % of the measured one; the trajectory 48 m rms against NASA's own integration at the same drag coefficient; the atmosphere table 0.6 % from the sounding-rocket density |
 
 ```console
 cd validation/apollo4
@@ -922,6 +923,55 @@ The atmosphere table of the case was written by
 `database/atmosphere/generate_atmosphere_table.py`, which calls NRLMSISE-00 through
 `pymsis` and writes the CCMC format the solver reads. `pymsis` is a dependency of that
 generator only, in the same way that the wind-table generator owns its data sources.
+
+### Project Fire flight II: the attitude
+
+```console
+cd validation/fire2
+./run_tacode.sh                             # 3-DOF, drag only,  3.0 s
+./run_tacode.sh -file config_matched.yml    # the same at table V's own drag
+./run_tacode.sh -file config_6dof.yml       # 6-DOF,             24 s
+python3 run_segments.py                     # 6-DOF as a chain over the shield ejections
+python3 compare_fire2.py                    # the trajectory numbers and figures
+python3 compare_attitude.py                 # the attitude numbers and a figure
+```
+
+**This is the case where nothing at all is assumed about the attitude, and the only one
+that exercises the six-degree-of-freedom side against flight data.** The Fire reentry
+package was completely uncontrolled, spin-stabilised at 171 rpm and axisymmetric, so
+there is no bank angle to guess and no roll history to supply; the mass, the three
+inertias, the reference diameter, the spin rate and the aerodynamic coefficients are all
+measured numbers printed in NASA TN D-3569 and TN D-4183.
+
+The case separates three things that all get called flight data, and says which each of
+its numbers is:
+
+- **Table V of TN D-3569 is not a measurement.** Its title says ``obtained from computer
+  simulation'': it is NASA's own three-degree-of-freedom trajectory, anchored to the
+  Ascension Island radar and flown through the sounding-rocket atmosphere. Agreeing with
+  it checks the solver. Table V prints both the dynamic pressure and the acceleration, so
+  the ballistic coefficient it was flown with can be read back out of it — a constant
+  6.1490e-3 m²/kg at every one of the 500 usable records. Flying that same value gives
+  **48 m rms in altitude and 0.09° in flight-path angle** over the 82 s from 120 km to
+  20 km, through a peak deceleration of 73 g. At the drag coefficient measured at Mach 35
+  instead, the difference is 117 m, which is the 1.6 % between the two coefficients and
+  not solver error.
+- **The density is a measurement**, from two Nike-Apache soundings, and the NRLMSISE-00
+  table the case flies matches it to a mean ratio of 0.994.
+- **The attitude is a measurement.** Figure 17 of TN D-4183 plots the dynamic pressure the
+  report's own six-degree-of-freedom simulations needed in order to match the frequency of
+  the measured rate gyros, which is that frequency written as a dynamic pressure. Tacode's
+  oscillation is **within 5 % of it**, 1.7 % on average over the four windows that come out
+  of the scan cleanly.
+
+What the case deliberately does **not** compare is as much a part of it: the measured
+angle-of-attack envelope climbs from 3° to 19.5° in steps, and every step was made by a
+discrete disturbance — a calorimeter melting asymmetrically, a heat shield coming off —
+whose magnitude the report gives but whose direction it does not. Putting them in would
+reproduce the envelope by choosing that direction, which is fitting and not validation.
+`validation/fire2/README.md` says all of this before it quotes a number, and also records
+the three figures that were examined and left un-digitised because their reading accuracy
+is coarser than the quantity being measured.
 
 ## Requirements
 
