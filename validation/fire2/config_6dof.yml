@@ -1,0 +1,287 @@
+# Project Fire flight II reentry, 1965-05-22 -- six degrees of freedom
+#
+# The same entry as config.yml with the attitude solved as well. **Nothing about
+# the attitude is assumed or tuned**: the vehicle was uncontrolled and
+# axisymmetric, the inertias and the reference diameter are measured values from
+# table I of NASA TN D-4183, the spin rate is the 171 rpm measured by telemetry
+# at separation, and the aerodynamic coefficients are the Mach 35 free-flight
+# data of figure 4 of the same report -- the very data the report used to turn
+# its rate-gyro records into angles of attack.
+#
+# What this run can be compared against is the **period** of the pitch and yaw
+# oscillation. What it cannot reproduce is the growth of the angle-of-attack
+# envelope, which was driven by discrete disturbances (heat-shield ejections,
+# asymmetric melting) that Tacode has no way to represent. README.md says so
+# before any number is quoted.
+#
+#   Entry state  : NASA TN D-3569, table V at t = 1618.25 s (entry_state.py)
+#   Mass, size   : NASA TN D-4183, table I (complete reentry package)
+#   Aerodynamics : NASA TN D-4183, figure 4, digitised (digitize_aerodynamics.py)
+#   Reference    : NASA TN D-3569, table V (extract_trajectory.py)
+#
+# **This configuration holds the mass, the inertias and the diameter fixed.** The
+# vehicle actually threw off three heat shields during the entry and lost 24 % of
+# its mass and 34 % of its pitch inertia; run_segments.py flies that as a chain of
+# runs, and README.md reports what the difference is worth. This file is the
+# single-segment baseline.
+
+computational_setup:
+  # Flag for initial or restart calculation
+  # --True: initial condition, False: restart
+  flag_initial: True
+
+  # Maximum time step, s
+  # --Table V ends at t = 1929.75 s, 311.5 s after the start of this run.
+  time_elapsed_maximum: 311.5
+
+  # Sanity check on the state (a diverged run stops instead of being written out)
+  flag_check_divergence: True
+  factor_radius_maximum: 10.0
+  factor_velocity_maximum: 10.0
+
+
+satellite:
+  # Mass, kg
+  # --Complete reentry package at reentry, NASA TN D-4183 table I. This is a
+  #   measured mass, not an estimate: NASA TN D-3569 table I builds it up from the
+  #   2004.88 kg at lift-off by subtracting each jettisoned item.
+  mass: 86.568
+  # Characteristic area, m^2
+  # --pi/4 x 0.672^2, the reference diameter d of table I
+  characteristic_area: 0.354657
+  # Characteristic length, m
+  characteristic_length: 0.672
+
+  # Aerodynamic model
+  # --constant, or fileread
+  kind_aerodynamic_model: fileread
+
+  # Not used with kind_aerodynamic_model: fileread; the table below is.
+  drag_coefficient: 1.4766
+  lift_coefficient: 0.0
+
+  # Aerodynamic table: CFx, CFz and CMy against total angle of attack, written by
+  # digitize_aerodynamics.py from all three panels of NASA TN D-4183 figure 4.
+  # --The table has no Knudsen dependence (figure 4 is one test condition), so the
+  #   same values are written at every Knudsen number. The consequence is confined
+  #   to the first 20 s, where the flow is rarefied but the dynamic pressure is
+  #   below 2 N/m2.
+  # --The moment is referenced to the station x_mc of table I, 0.2875 d aft of the
+  #   nose; attitude.center_of_gravity below moves it to the centre of gravity.
+  directory_path_specify: manual # default or manual
+  directory_aerodynamic: database/aerodynamic
+  filename_aerodynamic: aerodynamic_fire2.txt
+
+
+initial_settings:
+  # Table V at t = 1618.25 s, converted by entry_state.py.
+  # --The table gives the EARTH-RELATIVE speed, flight-path angle and azimuth, so
+  #   no rotation has to be subtracted (unlike validation/apollo10); only the
+  #   geodetic horizon has to be turned into the geocentric one.
+  # --The run starts 0.5 s after the 121 920 m entry interface because the scan
+  #   lost the latitude and longitude of the first record.
+  # Initial coordinate, 1:Long.(deg) 2: Lat.(deg), 3:Alt.(km)
+  coordinate:
+    - -16.9054
+    - -7.3966
+    - 120.4778
+  # Initial attitude (6-DOF), 3-2-1 Euler angles referred to the local horizon
+  # (geocentric NED), 1:Yaw(deg), 2:Pitch(deg), 3:Roll(deg)
+  # --Written by initial_attitude.py. The body axis is put 1.52 deg. off the
+  #   velocity, which is the angle NASA TN D-4183 reports between the two at
+  #   separation; the body is axisymmetric, so the plane it is tipped in is
+  #   arbitrary and the vertical one is used. **This is an oscillation amplitude,
+  #   not a trim attitude** -- the only equilibrium of this vehicle is zero
+  #   incidence.
+  attitude:
+    - 122.8505
+    - -16.2542
+    - 0.0000
+
+  # Initial angular velocity, body axes [p, q, r] in deg/s (relative to ECEF)
+  # --171 rpm = 17.907 rad/s, the roll rate measured from the telemetry signal
+  #   strength just after the reentry package separated (NASA TN D-3569). The spin
+  #   matters: it couples with the static moment and splits the pitch-yaw
+  #   oscillation into two frequencies, so a run without it has the wrong period.
+  #   The rotation of the Earth is 1/245 000 of this and is ignored.
+  angular_velocity:
+    - 1026.00
+    - 0.0
+    - 0.0
+  # [East, North, Up] in the local geocentric horizon, m/s
+  velocity:
+    - 9222.71
+    - -5955.14
+    - -2887.09
+  density_factor:
+    - 1.0
+
+
+planet:
+  # Gravitational constant, M.m2/kg2
+  gravitational_constant: 6.67408e-11
+  # Planet mass (Earth), kg
+  mass: 5.9723662e+24
+  # Planet radius on Equator, m
+  radius: 6.3781370e+6
+  # Ellipticity
+  ellipticity: 3.35281066474e-3
+  # Rotation rate, rad/s
+  rotation_rate: 7.292115e-5
+  # Dynamic form factor (J2) for potential calculation
+  potential_factor:
+    J2: 1.082629e-3
+    J22: -1.81222e-6
+    J3: -2.5356e-6
+    J4: -1.62336e-6
+    Lambda22: -14.545   # Degree
+
+
+epoch:
+  # Absolute time of the initial condition (UTC)
+  # --Lift-off was 21:54:59.703 GMT on 1965-05-22 (NASA TN D-3569), and this run
+  #   starts 1618.25 s later. Nothing in this case depends on the epoch (the wind
+  #   is off); it records when the state applies and ties the case to the
+  #   atmosphere table, which was generated for it.
+  flag_epoch: True
+  datetime: '1965-05-22T22:21:57.953Z'
+
+
+atmosphere:
+  # Atmosphere model
+  # --constant, or fileread
+  kind_atmosphere_model: fileread
+
+  # Atmosphere model: constant settings
+  # Densitry, kg/m3
+  density: 1.e-3
+  # Temperature, K
+  temperature: 300.0
+
+  # Atmosphere model: file input
+  # --NRLMSISE-00 at the entry point and the entry time, generated by
+  #   database/atmosphere/generate_atmosphere_table.py. F10.7 = F10.7A = 75 and
+  #   Ap = 4 for the May 1965 solar minimum; the indices of the day were not
+  #   available offline, so the table is checked against the density measured in
+  #   flight instead (compare_fire2.py, and the numbers in README.md).
+  directory_path_specify: manual # default or manual
+  directory_atmosphere: database/atmosphere
+  filename_atmosphere: atmospheremodel_fire2.txt
+
+
+attitude:
+  # 6-DOF (attitude) computation
+  flag_attitude: True
+
+  # Moment of inertia about the centre of gravity, body axes, kg m2
+  # --**Measured**, NASA TN D-4183 table I, complete reentry package. Not an
+  #   estimate, unlike validation/apollo4: the Fire package was weighed and swung.
+  inertia_tensor:
+    Ixx: 3.511
+    Iyy: 2.806
+    Izz: 2.874
+    Ixy: 0.0
+    Iyz: 0.0
+    Izx: 0.0
+
+  # Vector from the moment reference point of the aerodynamic table to the centre
+  # of gravity, body axes [forward, right, down], m
+  # --Figure 4 is referenced to the station x_mc that the footnote of table I
+  #   defines, x_mc = x_r - r + 0.2875 d = 0.3062 m in Fire Station coordinates.
+  #   The centre of gravity is at 0.277 m, which is 0.0292 m FORWARD of it (the
+  #   station increases aft), so the vector is +0.0292 m along the body x axis.
+  # --**No lateral offset.** The vehicle is axisymmetric and its centre of gravity
+  #   is on the axis, which is why it has no trim angle of attack and no lift.
+  # --README.md reports the run without this transfer as a sensitivity.
+  center_of_gravity:
+    - 0.029
+    - 0.0
+    - 0.0
+
+  # Dynamic damping derivatives (roll, pitch, yaw), 1/rad
+  # --**Assumed zero.** No damping derivative of this body is in the references,
+  #   and the quantity being compared is the period of the oscillation, which
+  #   damping barely moves. Setting Clp = 0 also means the spin is conserved,
+  #   while in flight it fell from 17.9 to 13.6 rad/s by t = 1658 s and then to
+  #   6.6 rad/s through an unexplained disturbance; see README.md.
+  damping_coefficient:
+    Clp: 0.0
+    Cmq: 0.0
+    Cnr: 0.0
+
+  # Only used with kind_aerodynamic_model: constant
+  static_stability_derivative: 0.0
+
+  # Switches for the individual moment terms
+  flag_moment_aerodynamic: True
+  flag_moment_damping: True
+  flag_moment_gravity_gradient: True
+
+
+wind:
+  # No wind: the atmosphere co-rotates with the Earth, as table V assumes when it
+  # reports an "Earth relative velocity".
+  flag_wind: False
+  kind_wind_model: constant
+  velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+  velocity_factor:
+    - 1.0
+
+
+time_integration:
+  # Time marching scheme
+  # --"runge_kutta", "explicit_euler"
+  kind_time_scheme: runge_kutta
+
+  # Constant timestep, s
+  # --Set by the attitude, not by the trajectory. The pitch-yaw oscillation has a
+  #   period of about 0.14 s at peak dynamic pressure and the spin one of 0.35 s;
+  #   solver.check_timestep_attitude wants at least twenty steps per period. The
+  #   step study is in README.md.
+  timestep_constant: 0.005
+
+
+restart_process:
+  # Output directory
+  directory_output: output_restart_6dof
+
+  # Time series
+  # --True: stored individually as time series, False: stored by overwriting
+  flag_time_series: False
+
+  # Digid for step
+  digid_step: 4
+
+  # Restart step for reading
+  restart_step: 500
+
+  # Restart file name (output)
+  file_restart: restart.dat
+
+  # Output frequency
+  frequency_output: 1
+
+
+post_process:
+  # Output directory
+  directory_output: output_result_6dof
+
+  # Output (KML)
+  kml:
+    flag_output: True
+    filename_output: geodetic.kml
+    linestyle_color: simplekml.Color.white
+    linestyle_width: 4
+    extrude: 1
+    frequency_output: 500
+
+  # Output (Tecplot)
+  tecplot:
+    flag_output: True
+    filename_output: tecplot.dat
+    # --One line per 0.025 s: the oscillation has to be resolved, not just the
+    #   trajectory, and its period is 0.14 s at the peak
+    frequency_output: 5
