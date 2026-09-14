@@ -44,14 +44,10 @@ tutorial/work_reentry_wind_table/output_restart/
 # Validation runs (the cases are reproducible; their numbers are recorded in the READMEs)
 validation/*/output_*/
 
-# LaTeX intermediates of the report (the sources and the figures are tracked)
-report/*.aux
-report/*.log
-report/*.out
-report/*.dvi
-report/*.toc
-report/*.synctex.gz
-report/*.pdf
+# The version 2 report. Kept out of the repository for now (user's decision,
+# 2026-09-14); the sources, the figures and the two built PDFs live under report/
+# on the working machine only.
+report/
 
 # Editor / OS
 *.swp
