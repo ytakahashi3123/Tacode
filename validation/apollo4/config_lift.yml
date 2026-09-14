@@ -4,9 +4,11 @@
 #
 #   ./run_tacode.sh -file config_lift.yml
 #
-# **The bank angle is the one measured in flight** (NASA TN D-5399, figure 6(b)).
-# Before that figure was found this case used a constant bank; the sweep over constant
-# angles is kept in README.md for comparison.
+# **The direction of the lift is the one measured in flight**: the bank angle below is
+# built from the flight-derived vertical lift-to-drag ratio of NASA TN D-5399,
+# figure 16(a), not from the bank angle of figure 6(b) (see the comment on
+# bank_angle_table, and README.md, for why). Before those figures were found this case
+# used a constant bank; the sweep over constant angles is kept in README.md.
 #
 # Validation case; see README.md in this directory for the sources of every number
 # and for what the comparison does and does not show.
@@ -15,9 +17,10 @@
 #   Aerodynamics: NASA TN D-6725, table I (trim coefficients, M > 29.5)
 #   Geometry    : NASA TN D-3890 (maximum diameter 154 in.)
 #
-# **Three degrees of freedom means drag only.** Apollo 4 flew a lifting entry
-# (L/D = 0.30) with roll modulation, so the computed trajectory is expected to
-# depart from the flight data; the size of that departure is the result here.
+# **Three degrees of freedom with the lift prescribed.** The magnitude of the lift is a
+# constant L/D and its direction comes from the flight; the vehicle is not trimmed here,
+# so this run says nothing about the attitude. config.yml is the drag-only case and
+# config_6dof.yml solves the attitude instead.
 
 computational_setup:
   # Flag for initial or restart calculation
@@ -78,13 +81,14 @@ satellite:
   #   seconds of reading error in its fast reversals moves the vertical lift by a
   #   factor of two right where the trajectory is most sensitive. The vertical lift
   #   is the quantity the trajectory responds to, so it is read directly.
-  # --The sign of the bank (left or right) is lost in the arccos; it does not enter
-  #   the vertical motion.
-  # --The angle is written **continuous, not folded into +-180 deg.**: the vehicle
-  #   rolls through 180 deg. at 110-145 s, and interpolating the folded values would
-  #   turn the lift the wrong way round through that manoeuvre. Only cos and sin of
-  #   the angle enter the force, so a value of -213 deg. is the same attitude as
-  #   +147 deg.
+  # --The arccos returns 0 to 180 deg., so this table is **the magnitude of the bank**:
+  #   the sign (left or right) is lost. Figure 6(b) keeps it, and it changes several
+  #   times -- negative to about 125 s, positive over 130-300 s, negative again over
+  #   300-450 s -- so the horizontal lift here points to the right of the flight
+  #   direction throughout, which is not what Apollo 4 flew. The vertical lift, which
+  #   is what the trajectory responds to, is cos(bank) and does not care. Take the
+  #   down-range agreement of this case as the result; the cross-range is not a
+  #   comparison. reference/apollo4_bank.dat holds the signed history.
   bank_angle_table:
     - [   0.0,    20.35]
     - [   5.0,    20.35]
