@@ -131,17 +131,27 @@ class TestExtrapolationAboveTheTable(unittest.TestCase):
 
     熱圏上部は等温・拡散平衡なので密度は指数関数で減る。
     端の値で止める（クランプ）と 522 km で 11 倍以上の過大評価になっていた。
+
+    チュートリアルの既定テーブルは 700 km まであるので、周回軌道（遠地点 522 km）は
+    外挿区間に入らない。それでも外挿そのものは 700 km より上で効くので、ここでは
+    **400 km で終わる `atmospheremodel.txt` を明示的に読んで**外挿を試験する。
     """
 
     @classmethod
     def setUpClass(cls):
         with quiet():
-            cls.atm = atmosphere.initial_settings_atmosphere(load_config())
+            cls.atm = atmosphere.initial_settings_atmosphere(cls.config_short())
 
-        config_clamp = load_config()
+        config_clamp = cls.config_short()
         config_clamp['atmosphere']['kind_extrapolation'] = atmosphere.KIND_EXTRAPOLATION_CLAMP
         with quiet():
             cls.atm_clamp = atmosphere.initial_settings_atmosphere(config_clamp)
+
+    @staticmethod
+    def config_short():
+        """400 km で終わるテーブルを読む config。"""
+        config = load_config(os.path.join(ROOT_DIR, 'tutorial', 'work_reentry', 'config.yml'))
+        return config
 
     def _at(self, altitude_km, atm):
         return atmosphere.get_atmosphere_property(altitude_km, atm)
@@ -739,6 +749,43 @@ class TestGeneratedAtmosphereTable(unittest.TestCase):
             self.assertTrue(np.all(np.isfinite(value)), key)
             self.assertTrue(np.all(value > 0.0), key)
 
+
+
+class TestTheTableCoversTheTutorial(unittest.TestCase):
+    """
+    チュートリアルが自分の大気テーブルの範囲の中を飛ぶこと（レビュー B-9）。
+
+    周回軌道のケースは遠地点 522 km で、400 km で終わるテーブルを読んでいたため
+    飛行時間の 45 % を外挿で飛んでいた。外挿は止まりはしないが、実測の 700 km
+    テーブルと比べると遠地点の密度を 31 % 小さく見積もる。テーブルを 700 km まで
+    伸ばして直したので、**戻されたらここで落ちる**。
+    """
+
+    CASES = ('work', 'work_reentry', 'work_reentry_6dof')
+
+    def test_every_case_stays_inside_its_table(self):
+        for name in self.CASES:
+            directory = os.path.join(ROOT_DIR, 'tutorial', name)
+            path_result = os.path.join(directory, 'output_result', 'tecplot.dat')
+            if not os.path.exists(path_result):
+                continue
+
+            with quiet():
+                atmosphere_dict = atmosphere.initial_settings_atmosphere(
+                    load_config(os.path.join(directory, 'config.yml')))
+            top = atmosphere_dict[atmosphere.KEY_Height][-1]
+
+            altitude = []
+            with open(path_result) as stream:
+                for line in stream:
+                    item = line.split()
+                    if len(item) > 7 and item[0][0].isdigit():
+                        altitude.append(float(item[6]))
+            self.assertGreater(len(altitude), 0, name)
+            self.assertLessEqual(
+                max(altitude), top,
+                '%s reaches %.1f km but its table stops at %.1f km'
+                % (name, max(altitude), top))
 
 
 if __name__ == '__main__':

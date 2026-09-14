@@ -111,7 +111,7 @@ atmosphere:
   # --Path resolution is the same as satellite.directory_path_specify
   directory_path_specify: manual # default or manual
   directory_atmosphere: database/atmosphere
-  filename_atmosphere: atmospheremodel.txt
+  filename_atmosphere: atmospheremodel_2015_700km.txt
 
   
 wind:

@@ -1,16 +1,23 @@
 # Atmosphere tables
 
-Both files are NRLMSISE-00 output. `atmosphere.filename_atmosphere` in `config.yml`
+All three files are NRLMSISE-00 output. `atmosphere.filename_atmosphere` in `config.yml`
 selects which one is used; the file format is detected from the file itself, so no
 other setting has to change.
 
 | File | Altitude | Format | Profile | Solar activity |
 |---|---|---|---|---|
 | `atmospheremodel.txt` | 0–400 km, 1 km | CCMC / VITMO | single point, 55°N 45°E | 2015-01-01 01:30 UT, F10.7 left at the site default |
+| `atmospheremodel_2015_700km.txt` | 0–700 km, 1 km | pymsis | single point, 55°N 45°E | 2015-01-01 01:30 UT, F10.7 = 140, F10.7A = 146, Ap = 8 |
 | `atmospheremodel_700km.txt` | 0–700 km, 1 km | NRLMSISE-00 Fortran | mean of 88 points, 50°S–50°N × 0–315°E | IDAY 0, 00:00 UT, F10.7 = F10.7A = 76.6, Ap = 8.4 7.0 5.0 4.0 3.0 3.9 6.8 |
 
-`atmospheremodel.txt` is the default used by every case in `tutorial/` and
-`tutorial/template/`. It is kept unchanged as the reference table.
+**The first two are the same atmosphere; the second just goes higher.**
+`atmospheremodel_2015_700km.txt` was generated to reproduce `atmospheremodel.txt` and
+carry on above its top, and it does: over 100–400 km the densities agree to **0.37 % rms**
+and at 400 km itself to 0.07 %. The cases that fly above 400 km — `tutorial/work`,
+`tutorial/work_montecarlo` and `tutorial/template` — use it; the re-entry cases, which
+start at 150 km and descend, keep `atmospheremodel.txt`.
+
+`atmospheremodel.txt` is kept unchanged as the reference table.
 
 This directory is the master copy. Each case directory keeps the table it actually uses
 in `<case>/database/atmosphere` and reads it from there, so to run a case against
@@ -32,8 +39,9 @@ that is the change in solar conditions, not the change in altitude range.
 
 ## Choosing between them
 
-Use `atmospheremodel.txt` unless you have a reason not to: it is what every committed
-case and reference output is based on.
+Use `atmospheremodel_2015_700km.txt` for a trajectory that goes above 400 km and
+`atmospheremodel.txt` for one that does not; they are the same atmosphere, so the choice
+costs nothing either way.
 
 Use `atmospheremodel_700km.txt` when the trajectory spends time well above 400 km and
 low solar activity is the condition you want. Above the top of whichever table is
@@ -46,6 +54,24 @@ To use it:
 ```yaml
 atmosphere:
   filename_atmosphere: atmospheremodel_700km.txt
+```
+
+## How `atmospheremodel_2015_700km.txt` was produced
+
+CCMC does not record which solar indices it used for `atmospheremodel.txt` — its header
+says only `not specified` for all three — so they were recovered by fitting. Running
+NRLMSISE-00 through `pymsis` at the same date and point over a grid of F10.7, F10.7A and
+Ap, and minimising the root-mean-square difference of `log(rho)` above 100 km, gives
+
+    F10.7 = 140, F10.7A = 146, Ap = 8
+
+with a residual of 0.37 %, which is small enough that the two tables can be treated as the
+same atmosphere. The file is then:
+
+```console
+python3 generate_atmosphere_table.py --datetime 2015-01-01T01:30:00Z \
+        --longitude 45.0 --latitude 55.0 --f107 140 --f107a 146 --ap 8 \
+        --altitude 0 700 --altitude-step 1 -o atmospheremodel_2015_700km.txt
 ```
 
 ## How `atmospheremodel_700km.txt` was produced

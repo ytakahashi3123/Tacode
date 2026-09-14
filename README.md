@@ -430,7 +430,7 @@ tutorial/work
 |-- run_tacode.sh
 `-- database
     |-- atmosphere
-    |   `-- atmospheremodel.txt
+    |   `-- atmospheremodel_2015_700km.txt
     `-- aerodynamic
         `-- aerodynamic.txt
 ```
@@ -444,7 +444,7 @@ satellite:
 atmosphere:
   directory_path_specify: manual
   directory_atmosphere: database/atmosphere
-  filename_atmosphere: atmospheremodel.txt
+  filename_atmosphere: atmospheremodel_2015_700km.txt
 ```
 
 A case is therefore self-contained: it can be copied elsewhere, and its tables can be
@@ -1030,9 +1030,16 @@ Two cautions when swapping tables:
 
 ## Atmosphere table range
 
-The atmosphere table (`database/atmosphere/atmospheremodel.txt`, NRLMSISE-00) covers
-0–400 km, while the tutorial orbit reaches 522 km. Above the top of the table the
-properties are extrapolated:
+The tutorial orbit reaches 522 km, and it used to be flown against a table that stopped
+at 400 km, so 45 % of it was extrapolated. It is now flown against
+`atmospheremodel_2015_700km.txt`, which covers 0–700 km at the same conditions, and the
+extrapolation below is no longer exercised by any case shipped here. Comparing the two
+measures what the extrapolation was worth: at the apogee it **underestimated the density
+by 31 %** against the real table — and moved the position by 2 m over 5000 s, because the
+density there is 2e-13 kg/m³. `test_atmosphere.py` now checks that every tutorial case
+stays inside the table it names.
+
+Above the top of whichever table is loaded, the properties are still extrapolated:
 
 ```math
 \rho(z) = \rho_{\rm top} \exp \left( - \frac{z - z_{\rm top}}{H} \right)
@@ -1041,9 +1048,11 @@ properties are extrapolated:
 The upper thermosphere is close to isothermal and in diffusive equilibrium, so this is the
 physically appropriate form rather than an ad-hoc fit. The scale height $H$ is not a
 hard-coded constant: it is fitted to the top 50 km of whichever table is loaded, so
-replacing the table changes it automatically. For the table shipped here the fit gives
+replacing the table changes it automatically. For a table ending at 400 km the fit gives
 47.8 km, which agrees with $kT/(m_{\rm O} g) = 49.3$ km — atomic oxygen makes up 96% of
-the mass at 400 km.
+the mass there. For one ending at 700 km the fit gives 111 km, which is larger because
+helium, which the table carries in its total density but not as a species, dominates that
+high up.
 
 The temperature is held at its value at the top of the table (the region is isothermal),
 and the Knudsen number is scaled inversely with the density. The exponent is capped at 100
@@ -1054,8 +1063,8 @@ the values there costs nothing.
 
 Set `atmosphere.kind_extrapolation` to `clamp` to restore the earlier behaviour, in which
 the values were held at those of the top of the table. That overestimates the density by a
-factor of 11 at 522 km, which moves the position by 93 m after one orbit and by 14 km
-after nine.
+factor of 11 at 522 km against the exponential form, which moves the position by 93 m
+after one orbit and by 14 km after nine.
 
 Extrapolation is a safety net, not a substitute for data: extending the table itself is
 better whenever the trajectory spends a long time above it.
