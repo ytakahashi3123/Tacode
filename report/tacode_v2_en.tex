@@ -17,6 +17,7 @@
 \graphicspath{ {./figure/} }
 
 \pagestyle{fancy}
+\setlength{\headheight}{14pt}
 \fancyhf{}
 \rhead{\thepage}
 \lhead{Tacode version 2: Theory, Verification and Validation}
@@ -79,7 +80,7 @@ what it can and cannot establish is itself part of the result.
 %----------------------------------------------------------------------
 \section*{Nomenclature}
 \begin{tabbing}
-\hspace{4.0em}\= \hspace{1.5em} \= \hspace{11cm} \kill
+\hspace{7.0em}\= \hspace{1.5em} \= \hspace{11cm} \kill
 	$a_e$      \> = \> semi-major axis (equatorial radius), m \\
 	$C_D, C_L$ \> = \> drag and lift coefficients \\
 	$C_{F}, C_{M}$ \> = \> force and moment coefficients in body axes \\
@@ -154,6 +155,7 @@ arrived when.
 it off the output is unchanged byte for byte, which the regression tests enforce.}
 \label{version_history}
 \begin{center}
+\small
 \begin{tabular}{l|l}
 \hline \hline
 Version & Added \\
@@ -622,9 +624,9 @@ which is therefore not a requirement of the code.
 
 Three levels are available. A \textbf{constant} drag coefficient needs no table at all. A
 \textbf{table against the Knudsen number} gives $C_D(Kn)$ for three degrees of freedom. A
-\textbf{table against the total angle of attack and the Knudsen number} gives the six
-coefficients $C_{Fx}, C_{Fy}, C_{Fz}, C_{Mx}, C_{My}, C_{Mz}$ needed for six degrees of
-freedom; it is organised in blocks introduced by a line \texttt{AOA <value>}, and a file
+\textbf{table against the total angle of attack as well as the Knudsen number} gives the
+six coefficients $C_{Fx}$, $C_{Fy}$, $C_{Fz}$, $C_{Mx}$, $C_{My}$, $C_{Mz}$ needed for six
+degrees of freedom; it is organised in blocks introduced by a line \texttt{AOA <value>}, and a file
 without such a line is read as a single block at zero incidence, which is why a version-1
 table still reproduces a version-1 result exactly.
 
@@ -714,50 +716,51 @@ output files. Continuous integration runs the suite on Python 3.9 to 3.13, the t
 case end to end, and the environment-setup script.
 
 \begin{table}[h]
-\caption{The test suite, grouped by what it establishes.}
+\caption{The test suite, grouped by what it establishes. The \texttt{test\_} prefix of every module name is omitted.}
 \label{test_modules}
 \begin{center}
-\begin{tabular}{p{0.26\linewidth}|p{0.66\linewidth}}
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.30\linewidth}|>{\raggedright\arraybackslash}p{0.60\linewidth}}
 \hline \hline
 Modules & What they establish \\
 \hline
-\texttt{test\_coordinate\_system}, \texttt{test\_attitude} &
+\texttt{coordinate\_system}, \texttt{attitude} &
 Round trips between the Cartesian, geodetic, polar, local-horizon and body frames,
 including the poles and longitude $180^\circ$; agreement with analytic rotations; that the
 quaternion kinematics reproduce a constant-rate rotation and drop the planetary rate \\
-\texttt{test\_force\_term}, \texttt{test\_kepler} &
+\texttt{force\_term}, \texttt{kepler} &
 Gravity against $-\nabla U$; the Coriolis, centrifugal and drag terms; that the lift is
 perpendicular to the air-relative velocity, has the commanded magnitude, turns with the
 bank angle, and is not evaluated when $C_L$ is absent; conservation of energy and angular
 momentum, and fourth-order convergence, in the two-body limit \\
-\texttt{test\_moment\_term}, \texttt{test\_solver\_attitude}, \texttt{test\_attitude\_verification} &
+\texttt{moment\_term}, \texttt{solver\_attitude}, \texttt{attitude\_verification} &
 Torque-free motion conserves angular momentum and energy; an axisymmetric body precesses
 at the analytic rate; the elliptic-function solution of the asymmetric body; the
 gravity-gradient torque against its closed form; the damping removes rotational energy;
 the pitch oscillation matches its analytic period; planar motion stays planar; the
 aerodynamic force at zero incidence equals the three-degree-of-freedom drag \\
-\texttt{test\_atmosphere}, \texttt{test\_database\_path} &
+\texttt{atmosphere}, \texttt{database\_path} &
 Table interpolation, clamping and the scaling of the Knudsen number; both table formats;
 the axisymmetry check; that \texttt{constant} does not read a table at all; that a
 round trip through the generator is reproduced; path resolution, and that a misspelt key
 stops the run rather than silently falling back \\
-\texttt{test\_wind} &
+\texttt{wind} &
 The frame of the given components; the still-air identity; that gravity and the rotation
 terms do not see the wind; the table in one to four axes, the seam of a global table,
 clamping and extrapolation, the refusal to interpolate in time without an epoch, and that
 each Runge-Kutta stage reads its own time \\
-\texttt{test\_solver\_invariants}, \texttt{test\_timestep\_attitude}, \texttt{test\_divergence} &
+\texttt{solver\_invariants}, \texttt{timestep\_attitude}, \texttt{divergence} &
 That the history arrays share one length and line up with the positions of the same index;
 that the $T/20$ criterion is the first one whose numerical damping disappears; that the
 shipped step is converged; that the divergence limits follow the initial state and that a
 diverged run now stops with a non-zero code \\
-\texttt{test\_regression\_3dof}, \texttt{test\_regression\_6dof} &
+\texttt{regression\_3dof}, \texttt{regression\_6dof} &
 That the tutorial cases reproduce their committed reference outputs, to a relative
 $10^{-9}$ normalised by the largest value in each column \\
-\texttt{test\_montecarlo}, \texttt{test\_helper\_config}, \texttt{test\_helper\_visualization} &
+\texttt{montecarlo}, \texttt{helper\_config}, \texttt{helper\_visualization} &
 The Monte-Carlo driver, the settings files of the post-processing tools and the
 visualisation helpers \\
-\texttt{test\_epoch}, \texttt{test\_error\_exit} &
+\texttt{epoch}, \texttt{error\_exit} &
 The absolute time in every form the parser can receive; and that no module returns the
 exit code 0 from an error path, which would hide a failure from a shell script or from
 continuous integration \\
@@ -837,6 +840,7 @@ which established that the solver was not the problem.
 37.3 km. Nothing is tuned; the entry mass and $C_D$ are the reported values.}
 \label{apollo4_results}
 \begin{center}
+\footnotesize
 \begin{tabular}{l|c|c}
 \hline \hline
 Run & Altitude difference & Relative-velocity difference \\
@@ -1097,6 +1101,7 @@ value. The hypersonic window ends at $t = 1700$ s, below which neither the Tacod
 table V carries a Mach axis.}
 \label{fire2_trajectory_results}
 \begin{center}
+\footnotesize
 \begin{tabular}{l|l|c|c|c}
 \hline \hline
 Run & Window & Altitude & Relative velocity & Flight-path angle \\
@@ -1216,10 +1221,12 @@ is the ratio of the dynamic pressures; the frequencies are that ratio mapped thr
 Eq. (\ref{tricyclic}) with $k$ fitted to the Tacode run.}
 \label{fire2_frequency}
 \begin{center}
+\footnotesize
 \begin{tabular}{c|r|r|c|r|r|c}
 \hline \hline
-Window, s & $q_\infty$ Tacode, N/m$^2$ & $q_\infty$ required, N/m$^2$ & ratio &
-$\omega$ computed, rad/s & $\omega$ measured, rad/s & ratio \\
+Window & $q_\infty$ Tacode & $q_\infty$ required & ratio &
+$\omega$ computed & $\omega$ measured & ratio \\
+s & N/m$^2$ & N/m$^2$ & & rad/s & rad/s & \\
 \hline
 1644.9 &  66\,652 &  67\,569 & 1.014 & 37.17 & 37.35 & 1.005 \\
 1649.3 & 117\,344 & 133\,438 & 1.137 & 45.93 & 48.33 & \textbf{1.052} \\

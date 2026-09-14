@@ -13,12 +13,20 @@
 # The English version builds with pdflatex, the Japanese one with platex and
 # dvipdfmx, which is the toolchain the version 1 manuscript used. Both need the
 # figures under figure/; they are committed, so a plain `make` needs no Python.
+#
+# The Japanese fonts have to be selected once before they are embedded, or the
+# PDF carries only font names and shows nothing on a machine without them:
+#
+#   kanji-config-updmap-user haranoaji        # this user
+#   sudo kanji-config-updmap-sys haranoaji    # everyone on the machine
+#
+# `pdffonts tacode_v2_ja.pdf` should then show "emb yes" for every font.
 #----------------------------------------------------------------------
 
 PYTHON  ?= python3
 PDFLATEX?= pdflatex
 PLATEX  ?= platex
-DVIPDF  ?= dvipdfmx
+DVIPDF  ?= dvipdfmx -V 7
 
 .PHONY: all en ja figure check clean
 

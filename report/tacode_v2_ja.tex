@@ -17,6 +17,7 @@
 \graphicspath{ {./figure/} }
 
 \pagestyle{fancy}
+\setlength{\headheight}{16pt}
 \fancyhf{}
 \rhead{\thepage}
 \lhead{Tacode version 2: 理論・検証・実証}
@@ -78,7 +79,7 @@ Apollo 4（1967 年）、Apollo 10（1969 年）、Project Fire flight II（1965
 %----------------------------------------------------------------------
 \section*{記号}
 \begin{tabbing}
-\hspace{4.5em}\= \hspace{1.5em} \= \hspace{10cm} \kill
+\hspace{7.0em}\= \hspace{1.5em} \= \hspace{10cm} \kill
 	$a_e$      \> = \> 赤道半径（長半径）, m \\
 	$C_D, C_L$ \> = \> 抗力係数・揚力係数 \\
 	$C_{F}, C_{M}$ \> = \> 機体軸の力係数・モーメント係数 \\
@@ -149,6 +150,7 @@ version 2 はこの 3 つをすべて足し、あわせて日付に依るモデ�
 無効なら出力はバイト単位で変わらない。これは回帰テストで強制している。}
 \label{version_history}
 \begin{center}
+\small
 \begin{tabular}{l|l}
 \hline \hline
 版 & 追加されたもの \\
@@ -649,41 +651,42 @@ cd tutorial/work_reentry && ./run_tacode.sh
 環境構築スクリプトを、それぞれ走らせる。
 
 \begin{table}[h]
-\caption{テストの構成。}
+\caption{テストの構成。モジュール名の接頭辞 \texttt{test\_} は省いてある。}
 \label{test_modules}
 \begin{center}
-\begin{tabular}{p{0.26\linewidth}|p{0.66\linewidth}}
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.30\linewidth}|>{\raggedright\arraybackslash}p{0.60\linewidth}}
 \hline \hline
 モジュール & 示していること \\
 \hline
-\texttt{test\_coordinate\_system}, \texttt{test\_attitude} &
+\texttt{coordinate\_system}, \texttt{attitude} &
 直交・測地・極・ローカル水平・機体軸の間の往復（極と経度 $180^\circ$ を含む）、解析的な
 回転との一致、クォータニオンのキネマティクスが等速回転を再現し惑星の自転を落とすこと \\
-\texttt{test\_force\_term}, \texttt{test\_kepler} &
+\texttt{force\_term}, \texttt{kepler} &
 重力が $-\nabla U$ に一致すること、コリオリ力・遠心力・抗力、揚力が対気速度に直交し
 指定の大きさを持ちバンク角とともに回ること、$C_L$ が無ければ評価されないこと、二体極限での
 エネルギーと角運動量の保存と 4 次収束 \\
-\texttt{test\_moment\_term}, \texttt{test\_solver\_attitude}, \texttt{test\_attitude\_verification} &
+\texttt{moment\_term}, \texttt{solver\_attitude}, \texttt{attitude\_verification} &
 無トルク運動での角運動量とエネルギーの保存、軸対称体の解析的歳差、非対称体の楕円関数解、
 重力傾斜トルクの閉形式との一致、減衰が回転エネルギーを奪うこと、ピッチ振動の解析的周期、
 平面運動が平面に留まること、迎角 0 の空力が 3 自由度の抗力に一致すること \\
-\texttt{test\_atmosphere}, \texttt{test\_database\_path} &
+\texttt{atmosphere}, \texttt{database\_path} &
 テーブルの内挿・クランプ・Knudsen 数のスケール、2 つの形式、軸対称性の検査、
 \texttt{constant} がテーブルを読まないこと、生成器との往復、パスの解決、綴り違いが黙って
 既定に落ちずに止まること \\
-\texttt{test\_wind} &
+\texttt{wind} &
 与えた成分の座標系、無風との恒等式、重力と回転項が風を見ないこと、1〜4 軸のテーブル、
 全球テーブルの継ぎ目、クランプと外挿、エポック無しで時刻内挿を拒むこと、各 Runge--Kutta 段が
 自分の時刻を読むこと \\
-\texttt{test\_solver\_invariants}, \texttt{test\_timestep\_attitude}, \texttt{test\_divergence} &
+\texttt{solver\_invariants}, \texttt{timestep\_attitude}, \texttt{divergence} &
 履歴配列の長さが揃い同じ添字の位置と対応すること、$T/20$ という基準が数値減衰の消える最初の
 基準であること、出荷値の刻みが収束していること、発散の上限が初期状態に従い、発散した計算が
 非ゼロの終了コードで止まること \\
-\texttt{test\_regression\_3dof}, \texttt{test\_regression\_6dof} &
+\texttt{regression\_3dof}, \texttt{regression\_6dof} &
 チュートリアルが参照出力を再現すること（各列の最大値で正規化した相対 $10^{-9}$） \\
-\texttt{test\_montecarlo}, \texttt{test\_helper\_config}, \texttt{test\_helper\_visualization} &
+\texttt{montecarlo}, \texttt{helper\_config}, \texttt{helper\_visualization} &
 モンテカルロの driver、後処理ツールの設定ファイル、可視化ツール \\
-\texttt{test\_epoch}, \texttt{test\_error\_exit} &
+\texttt{epoch}, \texttt{error\_exit} &
 パーサが受け取りうるあらゆる形の絶対時刻、および \texttt{src/} のどのモジュールもエラー経路で
 終了コード 0 を返さないこと（返すとシェルや CI が失敗を検知できない） \\
 \hline \hline
@@ -754,6 +757,7 @@ $\sigma = \arccos\left[ (L/D)_v / (L/D) \right]$ で復元する。
 していない。突入質量と $C_D$ は報告値である。}
 \label{apollo4_results}
 \begin{center}
+\footnotesize
 \begin{tabular}{l|c|c}
 \hline \hline
 計算 & 高度の差 & 相対速度の差 \\
@@ -977,6 +981,7 @@ Tacode は計算の途中で機体を変えられず、リスタート機能も�
 $t = 1700$ s までで、それ以下では Tacode のテーブルにも表 V にも Mach 軸が無い。}
 \label{fire2_trajectory_results}
 \begin{center}
+\footnotesize
 \begin{tabular}{l|l|c|c|c}
 \hline \hline
 計算 & 区間 & 高度 & 相対速度 & 経路角 \\
@@ -1088,6 +1093,7 @@ TN D-4183 の図 17 は 2 つを描いている。軌道の動圧（破線）と
 Tacode の計算に当てはめた $k$ で式 (\ref{tricyclic}) を通して写したものである。}
 \label{fire2_frequency}
 \begin{center}
+\footnotesize
 \begin{tabular}{c|r|r|c|r|r|c}
 \hline \hline
 窓, s & $q_\infty$ Tacode, N/m$^2$ & $q_\infty$ 要求, N/m$^2$ & 比 &
