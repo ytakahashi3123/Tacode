@@ -26,7 +26,9 @@
 computational_setup:
   # Flag for initial or restart calculation
   # --True: initial condition, False: restart
-  # NOTE: the restart branch (False) is not implemented; the code stops there.
+  # --False resumes from the last line of the restart file named in restart_process.
+  #   The iteration count starts again at zero but the elapsed time carries on, so
+  #   time_elapsed_maximum below is still an absolute elapsed time.
   flag_initial: True
 
   # Maximum time step, s
@@ -267,8 +269,8 @@ restart_process:
   digid_step: 4
 
   # Restart step for reading
-  # NOTE: read only by the restart routine, which is not implemented
-  #       (computational_setup.flag_initial: False stops the run).
+  # --Used when flag_time_series is True: the file whose name carries this step,
+  #   padded to digid_step digits, is the one a restart reads.
   restart_step: 500
 
   # Restart file name (output)
@@ -276,8 +278,8 @@ restart_process:
   file_restart: restart.dat
 
   # Output frequency
-  # NOTE: not used by the current version (the restart file is written once,
-  #       at the end of the run, with every step included).
+  # --Thins the history in the restart file. The last step is always written,
+  #   and a restart resumes from it.
   #frequency_output: 1
 
 

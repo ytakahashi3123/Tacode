@@ -34,11 +34,37 @@ class orbital(general):
   KEY_TRAJECTORY_TEMPERATURE = 'temperature'
   KEY_TRAJECTORY_KNUDSEN     = 'knudsen'
 
+  # read_restart が返す再開点の状態
+  KEY_RESTART_ITERATION  = 'iteration'
+  KEY_RESTART_TIME       = 'time_elapsed'
+  KEY_RESTART_COORDINATE = 'coordinate'
+  KEY_RESTART_VELOCITY   = 'velocity'
+  KEY_RESTART_QUATERNION = 'quaternion'
+  KEY_RESTART_OMEGA      = 'angular_velocity'
+  KEY_RESTART_EPOCH      = 'epoch'
+  KEY_RESTART_FILE       = 'filename'
+
+  # リスタートファイルのヘッダ。行数は姿勢・エポック・出力間隔の有無で変わるので、
+  # 行番号ではなく内容で探す（6 自由度の restart.dat では反復回数の行が 5 行目に来る）
+  MARKER_RESTART_EPOCH     = '# Epoch (UTC):'
+  MARKER_RESTART_ITERATION = '# Iteration, Elapsed time'
+
+  # データ行の列数。3 自由度は X,Y,Z,U,V,W、6 自由度はそれに q0..q3,P,Q,R が続く
+  NUM_COLUMN_RESTART_3DOF = 6
+  NUM_COLUMN_RESTART_6DOF = 13
+
+  # クォータニオンの単位長からのずれの許容値（書き出しは丸めていないので本来は 1e-16 の桁）
+  TOLERANCE_QUATERNION_NORM = 1.e-6
+
   newline_code='\n'
   blank_code=' '
 
   def __init__(self):
     print("Calling class: orbital")
+
+    # リスタートで読んだ再開点の状態（initial_settings が入れ、
+    # initial_settings_attitude が姿勢の分を取り出す）
+    self.restart_state = None
 
     return
 
@@ -68,12 +94,11 @@ class orbital(general):
     return directory_path
 
 
-  def initial_settings(self, config):
+  def initial_settings(self, config, epoch_dict=None):
 
     print('Setting initial conditions')
 
     flag_initial = config['computational_setup']['flag_initial']
-    timestep     = config['time_integration']['timestep_constant']
 
     # Initial start
     if flag_initial :
@@ -95,46 +120,62 @@ class orbital(general):
       coordinate_geodetic = [coord_init]
       velocity_polar      = [veloc_init]
 
+      # 初期条件は測地系・地心ローカル系で与えられるので、ECEF 直交系に直す
+      coordinate_cartesian = []
+      coordinate_polar     = []
+      velocity_cartesian   = []
+      for n in range(0,iteration+1):
+        cartesian_coord_tmp = coordinate_system.convert_geodetic_cartesian(config, coordinate_geodetic[n])
+        coordinate_cartesian.append( np.array( cartesian_coord_tmp ) )
+
+        # Set parameters in polar coordinate from cartesian coordinate
+        # polar_coord: [radius, 極座標における緯度(beta), 極座標における経度(alpha)]
+        polar_coord_tmp = coordinate_system.set_angle_polar(config, cartesian_coord_tmp)
+        coordinate_polar.append( np.array( polar_coord_tmp) )
+
+        # Velocity
+        longitude = polar_coord_tmp[2]
+        latitude  = polar_coord_tmp[1]
+        cartesian_veloc_tmp = coordinate_system.convert_polar_carteasian(config, velocity_polar[n] ,longitude, latitude)
+        velocity_cartesian.append( np.array( cartesian_veloc_tmp) )
+
     else :
-      print('--from restart file')
+      print('--From restart file')
 
-      print('Restart routine is Not implemented in this version.')
-      print('Please check: flag_initial.')
-      print('Program stopped')
-      sys.exit(1)
+      # 再開点の状態。姿勢の分は initial_settings_attitude が受け取る
+      # （返り値の数を増やさないため、解析結果をインスタンスに置く）
+      restart_state      = self.read_restart(config, epoch_dict)
+      self.restart_state = restart_state
 
-      coordinate_geodetic = []
-      velocity_polar      = []
+      # 使うのは最終行＝再開点だけで、履歴は復元しない。
+      # 出力の配列は再開点から始まるので反復回数は 0 に戻し、経過時間だけを継ぐ
+      # （時刻列は再開時刻から連続し、風のテーブルも同じ時刻で引かれる）
+      print('--Resuming at iteration {:d} of the previous run, elapsed time {:g} s'.format(
+            restart_state[self.KEY_RESTART_ITERATION], restart_state[self.KEY_RESTART_TIME]))
 
-      iteration, time_elapsed, coordinate_geodetic, velocity_geodetic = self.read_restart(config, coordinate_geodetic, velocity_polar)
+      iteration    = 0
+      time_elapsed = restart_state[self.KEY_RESTART_TIME]
+
+      # リスタートファイルが持っているのは ECEF 直交系そのものなので、測地系を経由しない。
+      # 往復（直交 -> 測地 -> 直交）を通すと最後の桁が動き、続きの計算が
+      # 元の計算の続きとビット一致しなくなる
+      coordinate_cartesian = [ restart_state[self.KEY_RESTART_COORDINATE] ]
+      velocity_cartesian   = [ restart_state[self.KEY_RESTART_VELOCITY] ]
+
+      polar_coord_tmp     = coordinate_system.set_angle_polar(config, coordinate_cartesian[0])
+      coordinate_polar    = [ np.array( polar_coord_tmp ) ]
+      coordinate_geodetic = [ np.array( coordinate_system.convert_cartesian_geodetic(config, coordinate_cartesian[0]) ) ]
+      velocity_polar      = [ np.array( coordinate_system.convert_carteasian_polar(config, velocity_cartesian[0],
+                                                                                   polar_coord_tmp[2], polar_coord_tmp[1]) ) ]
+
+      # 姿勢を持つファイルを 3 自由度で読んだときは、捨てていることを知らせる
+      section_attitude = attitude.get_setting(config, 'attitude', None)
+      if restart_state[self.KEY_RESTART_QUATERNION] is not None and \
+         not bool( attitude.get_setting(section_attitude, 'flag_attitude', False) ) :
+        print('Warning: the restart file holds attitude data but attitude.flag_attitude is False.')
+        print('--The run continues as a 3-DOF computation and the attitude in the file is dropped.')
 
     print('--Iteration: ',iteration)
-
-    
-    # Reconstruction
-    coordinate_cartesian = []
-    coordinate_polar     = []
-    velocity_cartesian   = []
-    #time_elapsed         = []
-    for n in range(0,iteration+1):
-      # Initial (restart) coordinate and velocity are given by those in geodetic coordinte
-      # Those values are converted to in cartesian coordinate
-      cartesian_coord_tmp = coordinate_system.convert_geodetic_cartesian(config, coordinate_geodetic[n])
-      coordinate_cartesian.append( np.array( cartesian_coord_tmp ) )
-
-      # Set parameters in polar coordinate from cartesian coordinate
-      # polar_coord: [radius, 極座標における緯度(beta), 極座標における経度(alpha)]
-      polar_coord_tmp = coordinate_system.set_angle_polar(config, cartesian_coord_tmp)
-      coordinate_polar.append( np.array( polar_coord_tmp) )
-
-      # Velocity
-      longitude = polar_coord_tmp[2]
-      latitude  = polar_coord_tmp[1]
-      cartesian_veloc_tmp = coordinate_system.convert_polar_carteasian(config, velocity_polar[n] ,longitude, latitude)
-      velocity_cartesian.append( np.array( cartesian_veloc_tmp) )
-
-      # Time 
-      #time_elapsed.append(n*timestep)
 
     coordinate_dict = {'geodetic': coordinate_geodetic, 'cartesian':coordinate_cartesian, 'polar':coordinate_polar}
     velocity_dict   = {'cartesian': velocity_cartesian, 'polar':velocity_polar}
@@ -167,9 +208,27 @@ class orbital(general):
     print('Setting initial conditions of the attitude (6-DOF)')
 
     if not config['computational_setup']['flag_initial'] :
-      print('Restart of the attitude computation is not implemented in this version.')
-      print('Program stopped')
-      sys.exit(1)
+      # リスタート。クォータニオンと角速度はファイルの値をそのまま使う。
+      # ファイルの角速度は「機体軸成分・慣性系基準」で、内部状態と同じ規約なので変換しない
+      # （config で与える初期角速度が ECEF 基準なのとは違う。output_restart の
+      #   ヘッダにもそう書いてある）
+      restart_state = self.restart_state
+      if restart_state is None or restart_state[self.KEY_RESTART_QUATERNION] is None :
+        print('The restart file has no attitude data, but attitude.flag_attitude is True.')
+        if restart_state is not None :
+          print('--File:', restart_state[self.KEY_RESTART_FILE])
+        print('--A 6-DOF run must restart from a restart file written by a 6-DOF run.')
+        print('Program stopped.')
+        sys.exit(1)
+
+      quaternion_init     = restart_state[self.KEY_RESTART_QUATERNION]
+      omega_inertial_init = restart_state[self.KEY_RESTART_OMEGA]
+
+      print('--Quaternion (ECEF to body):', quaternion_init)
+      print('--Angular velocity (body axes, inertial reference, deg/s):', omega_inertial_init*self.rad2deg)
+
+      return {self.KEY_ATTITUDE_QUATERNION: [quaternion_init],
+              self.KEY_ATTITUDE_OMEGA     : [omega_inertial_init]}
 
     section_initial = attitude.get_setting(config, 'initial_settings', None)
     euler_init = np.array( attitude.get_setting(section_initial, 'attitude', [0.0, 0.0, 0.0]), dtype=float )*self.deg2rad
@@ -198,21 +257,13 @@ class orbital(general):
 
   def output_restart(self, config, iteration, time_elapsed, coordinate, velocity, attitude_dict=None, epoch_dict=None):
 
-    dir_restart      = config['restart_process']['directory_output']
-    file_restart     = config['restart_process']['file_restart']
-    flag_time_series = config['restart_process']['flag_time_series']   # --True: stored individually as time series, False: stored by overwriting
-    digid_step       = config['restart_process']['digid_step']
     # 出力間隔。従来は読まれていなかったが、姿勢計算のように時間刻みが細かいと
     # 全ステップ書き出すとファイルが巨大になるので有効にした。既定の 1 では従来と同じ
     frequency_output = config['restart_process'].get('frequency_output', 1)
     if frequency_output < 1 :
       frequency_output = 1
 
-    if flag_time_series :
-      addfile = '_'+str(iteration).zfill(digid_step)
-      filename_tmp = dir_restart + '/' + self.split_file(file_restart,addfile,'.')
-    else :
-      filename_tmp = dir_restart + '/' + file_restart
+    filename_tmp = self.get_restart_filename(config, iteration)
 
     print('Writing restart data...:',filename_tmp)
 
@@ -253,39 +304,164 @@ class orbital(general):
     return
 
 
-  def read_restart(self, config, coordinate, velocity):
+  def get_restart_filename(self, config, step):
+    #
+    # リスタートファイルの名前。読む側と書く側で規則がずれていると
+    # 「書いたファイルが読めない」ので 1 か所に置く
+    # （かつて書き出しは restart_0500.dat、読み取りは restart_s0500.dat を探していた）。
+    #
+    #   flag_time_series: True  -> 1 ステップ 1 ファイル（step を名前に埋める）
+    #                     False -> 同じ名前に上書き
+    #
+    dir_restart  = config['restart_process']['directory_output']
+    file_restart = config['restart_process']['file_restart']
 
-    dir_restart      = config['restart_process']['directory_output']
-    file_restart     = config['restart_process']['file_restart']
-    flag_time_series = config['restart_process']['flag_time_series']   # --True: stored individually as time series, False: stored by overwriting
-    digid_step       = config['restart_process']['digid_step']
-    restart_step     = config['restart_process']['restart_step']
+    if not config['restart_process']['flag_time_series'] :
+      return dir_restart + '/' + file_restart
 
-    if flag_time_series :
-      addfile = '_s'+str(restart_step).zfill(digid_step)
-      filename_tmp = dir_restart + '/' + self.split_file(file_restart,addfile,'.')
-    else :
-      filename_tmp = dir_restart + '/' + file_restart
-    
-    # Open file
+    addfile = '_' + str(step).zfill(config['restart_process']['digid_step'])
+
+    return dir_restart + '/' + self.split_file(file_restart, addfile, '.')
+
+
+  def read_restart(self, config, epoch_dict=None):
+    #
+    # リスタートファイルを読み、再開点（最終行）の状態を返す。
+    #
+    # ファイルは初期計算からの履歴を全部持っているが、使うのは最終行だけにしてある。
+    # 大気量（密度・温度・Kn）は書かれていないので履歴を復元しても軌道量の配列が
+    # 揃わず、restart_process.frequency_output で間引いたファイルでは行と反復回数も
+    # 対応しないため。再開後の出力は再開点から始まり、時刻は記録された経過時間から続く。
+    #
+    # ヘッダの行数は姿勢・エポック・出力間隔の有無で変わるので、行番号ではなく
+    # 内容で探す。3 自由度か 6 自由度かはデータ行の列数で決める。
+    #
+    filename_tmp = self.get_restart_filename(config, config['restart_process']['restart_step'])
+
+    print('Reading restart data...:', filename_tmp)
+
+    if not os.path.exists(filename_tmp) :
+      print('The restart file is not found:', filename_tmp)
+      print('--Check restart_process: directory_output, file_restart, flag_time_series, restart_step.')
+      print('Program stopped.')
+      sys.exit(1)
+
     with open(filename_tmp) as f:
-      lines = f.readlines()
-    # リストとして取得 
-    lines_strip = [line.strip() for line in lines]
-    # Iteration 
-    words = lines_strip[2].split()
-    iteration    = int(words[1])
-    time_elapsed = float(words[2])
+      lines_strip = [line.strip() for line in f.readlines()]
 
-    # Reading data
-    for n in range(3,len(lines_strip )):
-      words = lines_strip[n].split()
-      coordinate.append( float(words[0]), float(words[1]), float(words[2]) )
-      velocity.append( float(words[3]), float(words[4]), float(words[5]) )
-    
-    f.close()
+    iteration    = None
+    time_elapsed = None
+    epoch_string = None
+    data_rows    = []
 
-    return iteration, time_elapsed, coordinate, velocity
+    for index in range(0, len(lines_strip)):
+      line = lines_strip[index]
+
+      if line.startswith(self.MARKER_RESTART_EPOCH) :
+        epoch_string = line[len(self.MARKER_RESTART_EPOCH):].strip()
+        continue
+
+      if line.startswith(self.MARKER_RESTART_ITERATION) :
+        # 次の行が "# <反復回数> <経過時間>"
+        words = lines_strip[index+1].lstrip('#').split() if index+1 < len(lines_strip) else []
+        if len(words) < 2 :
+          print('The restart file does not carry the iteration and the elapsed time:', filename_tmp)
+          print('Program stopped.')
+          sys.exit(1)
+        try:
+          iteration    = int(words[0])
+          time_elapsed = float(words[1])
+        except ValueError:
+          print('The iteration and the elapsed time in the restart file are not numbers:', ' '.join(words))
+          print('--File:', filename_tmp)
+          print('Program stopped.')
+          sys.exit(1)
+        continue
+
+      if line.startswith('#') or len(line) == 0 :
+        continue
+
+      try:
+        data_rows.append( [float(word) for word in line.split()] )
+      except ValueError:
+        continue
+
+    if iteration is None :
+      print('The restart file has no "' + self.MARKER_RESTART_ITERATION + '" line:', filename_tmp)
+      print('Program stopped.')
+      sys.exit(1)
+
+    if len(data_rows) == 0 :
+      print('The restart file has no numerical data:', filename_tmp)
+      print('Program stopped.')
+      sys.exit(1)
+
+    # 再開点は最終行（出力間隔で間引いても最終ステップは必ず書かれている）
+    state = data_rows[-1]
+    if len(state) != self.NUM_COLUMN_RESTART_3DOF and len(state) != self.NUM_COLUMN_RESTART_6DOF :
+      print('The last line of the restart file has {:d} columns; expected {:d} (3-DOF) or {:d} (6-DOF).'.format(
+            len(state), self.NUM_COLUMN_RESTART_3DOF, self.NUM_COLUMN_RESTART_6DOF))
+      print('--File:', filename_tmp)
+      print('Program stopped.')
+      sys.exit(1)
+
+    restart_state = {self.KEY_RESTART_ITERATION : iteration,
+                     self.KEY_RESTART_TIME      : time_elapsed,
+                     self.KEY_RESTART_COORDINATE: np.array(state[0:3]),
+                     self.KEY_RESTART_VELOCITY  : np.array(state[3:6]),
+                     self.KEY_RESTART_QUATERNION: None,
+                     self.KEY_RESTART_OMEGA     : None,
+                     self.KEY_RESTART_EPOCH     : epoch_string,
+                     self.KEY_RESTART_FILE      : filename_tmp}
+
+    if len(state) == self.NUM_COLUMN_RESTART_6DOF :
+      quaternion = np.array(state[6:10])
+      norm_tmp   = np.linalg.norm(quaternion)
+      if abs(norm_tmp - 1.0) > self.TOLERANCE_QUATERNION_NORM :
+        # 正規化して黙って進めない。単位長から外れているのは書き写しの誤りか、
+        # 発散した計算の残骸で、どちらも「続きを計算してよい状態」ではない
+        print('The quaternion in the restart file is not of unit length: {:.6e}'.format(norm_tmp))
+        print('--File:', filename_tmp)
+        print('Program stopped.')
+        sys.exit(1)
+      restart_state[self.KEY_RESTART_QUATERNION] = quaternion
+      restart_state[self.KEY_RESTART_OMEGA]      = np.array(state[10:13])
+
+    self.check_restart_epoch(restart_state, epoch_dict)
+
+    return restart_state
+
+
+  def check_restart_epoch(self, restart_state, epoch_dict):
+    #
+    # 経過時間は「エポックからの秒」なので、エポックが変わると同じ経過時間が
+    # 別の絶対時刻を指す（風のテーブルの時間内挿がそこで変わる）。
+    # 食い違いは黙って進めず、止める。
+    #
+    epoch_string = restart_state[self.KEY_RESTART_EPOCH]
+    epoch_config = epoch_module.get_string(epoch_dict, 0.0) if epoch_dict is not None else None
+
+    if epoch_string is None and epoch_config is None :
+      return
+
+    if epoch_string is not None and epoch_config is not None :
+      if epoch_string != epoch_config :
+        print('The epoch differs between the restart file and the control file.')
+        print('--Restart file:', epoch_string)
+        print('--Control file:', epoch_config)
+        print('--The elapsed time in the restart file is counted from its own epoch.')
+        print('Program stopped.')
+        sys.exit(1)
+      return
+
+    if epoch_string is None :
+      print('Warning: the control file sets an epoch but the restart file carries none.')
+      print('--The elapsed time of the restart file is taken as seconds from', epoch_config)
+    else :
+      print('Warning: the restart file carries an epoch (' + epoch_string + ') but the control file sets none.')
+      print('--The run continues with the elapsed time alone.')
+
+    return
 
 
   def get_attitude_output(self, config, coordinate_cartesian, velocity_cartesian, quaternion, omega_inertial, rotation_rate_planet, velocity_air=None):
@@ -318,7 +494,7 @@ class orbital(general):
     return self.blank_code.join([str(value) for value in value_output])
 
 
-  def output_tecplot(self, config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict=None, epoch_dict=None, wind_dict=None):
+  def output_tecplot(self, config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict=None, epoch_dict=None, wind_dict=None, time_elapsed_initial=0.0):
 
     if config['post_process']['tecplot']['flag_output'] :
 
@@ -373,7 +549,9 @@ class orbital(general):
       file.write('zone t=time i= '+str(num_output)+' f=point' + self.newline_code )
       for n in range(0,iteration+1):
         if n%frequency_output == 0 :
-          time_tmp = float(n)*dt
+          # 時刻はリスタートの再開時刻から連続させる（初期計算では 0）。
+          # 累積加算にしないのはソルバーと同じ理由で、丸めを溜めないため
+          time_tmp = time_elapsed_initial + float(n)*dt
           str_time = str( time_tmp ) + self.blank_code
           str_coord_cart = ''
           str_coord_geod = ''

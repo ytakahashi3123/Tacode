@@ -830,6 +830,7 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | `test_attitude_verification.py` | Problems whose answer is known in closed form, solved by the production solver: the order of convergence, the Jacobi-elliptic solution of the torque-free asymmetric body, conservation of the angular momentum vector in inertial space, the precession of an axisymmetric body, the logarithmic decrement of a damped oscillation, the gravity-gradient libration frequency in a circular orbit, and the axisymmetry of the tabulated aerodynamics |
 | `test_regression_6dof.py` | The 6-DOF tutorial case, run for its full 1000 s, reproduces the `tecplot.dat`, `restart.dat` and `geodetic.kml` committed in `tutorial/work_reentry_6dof` |
 | `test_timestep_attitude.py` | The timestep itself: the `T/20` criterion the solver warns at is the first one whose numerical damping disappears, the order of convergence survives the atmosphere table, the angle-of-attack table is only C0 and costs the fourth order, the shipped `dt = 0.05 s` is converged, and the check itself runs once per `INTERVAL_CHECK_TIMESTEP` rather than every step |
+| `test_restart.py` | Restart: the file name agrees between the writing and the reading side, the header is found by its content rather than by its line number (the attitude, the epoch and the output-frequency lines each move it), the last line is the point resumed from, and a missing file, a missing iteration line, no data, an unexpected number of columns, a quaternion off the unit sphere, an epoch differing from the control file, or a six-degree-of-freedom run pointed at a three-degree-of-freedom file each stop the run. The continuation is byte-identical to the tail of the single long run, in three and in six degrees of freedom, and its time column carries on from the time recorded rather than from zero |
 | `test_epoch.py` | The absolute time: an ISO 8601 epoch is read from the configuration in every form PyYAML can hand over, the derived day of year, universal time and Julian date are right across a leap year and a year boundary, the Julian date agrees with `astropy` where it is installed, and the epoch stays off in every configuration shipped with the code |
 | `test_error_exit.py` | The exit code of an error path: no module in `src/` calls the built-in `exit()`, which returns 0 and hides a failure from the shell, the Monte-Carlo driver and CI, and a mistyped wind model, a wind velocity of the wrong length and a malformed epoch each stop with the code 1, both in process and when the solver is run as a child process |
 | `test_divergence.py` | The sanity check on the state: the limits are built from the initial state (ten times the geocentric distance, ten times the escape velocity) and follow the configuration, a state which is not finite - position, velocity, quaternion or angular velocity - stops the run, so does a distance or a speed beyond the limit, a state just inside them does not, a coarse time step which used to write a diverged trajectory and return 0 now stops with the code 1, the same run goes through with the check off, and a sound run is untouched |
@@ -1410,12 +1411,40 @@ arcminutes — are insensitive to that at the level of a second.
 
 ## Restart
 
-Restart (`computational_setup.flag_initial: False`) is **not implemented** in this version;
-the code stops with a message, and that includes the attitude. `output_restart/restart.dat`
-is written on every run, but it currently stores the whole history rather than the final
-state only. `restart_process.frequency_output` thins that history out; it defaults to 1,
-which writes every step as before, and the last step is always written whatever the
-setting.
+`output_restart/restart.dat` is written on every run. It holds the whole history in the
+ECEF Cartesian system — position and velocity, followed by the quaternion and the angular
+velocity when the attitude is solved. `restart_process.frequency_output` thins that
+history out; it defaults to 1, which writes every step, and the last step is always
+written whatever the setting.
+
+Setting `computational_setup.flag_initial: False` **resumes from the last line of that
+file**, which is the state at the end of the previous run:
+
+- The run continues in the state the file records. The earlier history is not restored,
+  because the file carries no atmospheric quantities and, once thinned, no longer maps its
+  lines onto iteration numbers. The output of the resumed run therefore begins at the
+  point it resumes from.
+- The iteration count restarts at zero but **the elapsed time carries on**. `Time[s]` in
+  `tecplot.dat` continues from the recorded time, so a wind table with a time axis is read
+  at the same absolute time as it would have been in a single run, and the epoch written
+  in the header still dates every row.
+- `computational_setup.time_elapsed_maximum` is read as an absolute elapsed time. Resuming
+  at 500 s with a maximum of 5000 s computes up to 5000 s in total, not 5500 s.
+- The state is taken in the Cartesian system the file stores, without a detour through the
+  geodetic one, so the continuation is **bit-for-bit the tail of the single long run**.
+  `test/test_restart.py` holds that as its acceptance condition, for three and for six
+  degrees of freedom.
+
+Which file is read follows `restart_process`: `flag_time_series: False` reads the single
+`file_restart`, and `True` reads the file whose name carries `restart_step` padded to
+`digid_step` digits — the same rule the writing side uses.
+
+The run stops, rather than guessing, when the file is missing, when it carries no
+iteration line or no data, when a line has neither 6 nor 13 columns, when the quaternion
+is not of unit length, when the epoch in the file differs from the one in the control
+file, or when a six-degree-of-freedom run is pointed at a file written without an
+attitude. A file that does carry an attitude, read by a three-degree-of-freedom run, only
+warns that the attitude is being dropped.
 
 
 # Contact:

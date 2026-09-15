@@ -38,13 +38,13 @@ newline_code ='\n'
 rad2deg = 180.0/np.pi
 
 
-def output_routine(config, iteration, coordinate_dict, velocity_dict):
+def output_routine(config, iteration, coordinate_dict, velocity_dict, time_elapsed_initial=0.0):
 
   #if config['post_process']['flag_output_gpx'] :
   #  output_gpx(config, iteration, coordinate_dict, velocity_dict)
 
   if config['post_process']['kml']['flag_output'] :
-    output_kml(config, iteration, coordinate_dict, velocity_dict)
+    output_kml(config, iteration, coordinate_dict, velocity_dict, time_elapsed_initial)
 
   return
 
@@ -74,7 +74,7 @@ def resolve_kml_color(color_kml, simplekml):
   return color_code
 
 
-def output_kml(config, iteration, coordinate_dict, velocity_dict):
+def output_kml(config, iteration, coordinate_dict, velocity_dict, time_elapsed_initial=0.0):
 
   import simplekml as simplekml
 
@@ -96,7 +96,8 @@ def output_kml(config, iteration, coordinate_dict, velocity_dict):
   time_output     = []
   for n in range(0,iteration+1):
     if n%frequency_output_kml == 0 :
-      time_tmp = float(n)*dt
+      # 時刻はリスタートの再開時刻から連続させる（初期計算では 0）
+      time_tmp = time_elapsed_initial + float(n)*dt
       lat_tmp = coordinate_geod[n][1]*rad2deg
       lon_tmp = coordinate_geod[n][0]*rad2deg
       alt_tmp = int(coordinate_geod[n][2])
