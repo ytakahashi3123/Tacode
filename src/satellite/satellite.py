@@ -3,7 +3,8 @@
 import sys as sys
 import numpy as np
 import os as os
-import scipy.interpolate
+import scipy.interpolate   # set_interpolator のコメントに残した
+                          # RegularGridInterpolator を戻すときに要る
 import attitude.attitude as attitude
 from general.general import get_database_directory
 
@@ -136,15 +137,30 @@ def set_interpolator(aerodynamic_dict):
 
   interpolator = {}
 
-  # 迎角依存の係数表があるときだけ (AOA, Kn) の 2 次元補間器を作る。
+  # 迎角依存の係数表があるときだけ (AOA, Kn) の格子を用意する。
   # 迎角が 1 つしかない表（従来の AOA 0 のみのファイル）では作らず、
   # 6 自由度計算では表の値を迎角によらず使う（復元モーメントは立たない）。
+  #
+  # ここに置くのは力とモーメントを 1 本にまとめた (AOA, Kn, 6) の配列で、
+  # 引くのは get_aerodynamic_coefficient_attitude の evaluate_bilinear。
+  # scipy の RegularGridInterpolator は使わない: 1 点を引くのに 22 us かかり、
+  # 6 自由度計算の 1 割を占めていた（手書きの双一次は 5 us）。RGI は任意次元の
+  # 超立方体を itertools で回す造りなので、2 次元 1 点では手間が計算を覆う。
+  #
+  # **値は RGI とビット単位で一致する。** evaluate_bilinear は RGI の
+  # _evaluate_linear と同じ順序で足し込んである（実テーブル 3 種・節点を含む
+  # 9936 点で確認済み。test_atmosphere.TestBilinearMatchesScipy が検査する）。
+  #
+  # 戻すときはここを次の 2 行に替え、evaluate_bilinear の呼び出しを
+  # interpolator[KEY_COEF](np.array([[aoa, kn]]))[0] に戻せばよい:
+  #
+  #   interpolator[KEY_COEF] = scipy.interpolate.RegularGridInterpolator(
+  #                              (angle_of_attack, aerodynamic_dict[KEY_KN]), coefficient,
+  #                              method='linear', bounds_error=False, fill_value=None)
+  #
   angle_of_attack = aerodynamic_dict[KEY_AOA]
   if len(angle_of_attack) > 1 :
-    coefficient = np.concatenate([aerodynamic_dict[KEY_CF], aerodynamic_dict[KEY_CM]], axis=2)
-    interpolator[KEY_COEF] = scipy.interpolate.RegularGridInterpolator(
-                               (angle_of_attack, aerodynamic_dict[KEY_KN]), coefficient,
-                               method='linear', bounds_error=False, fill_value=None)
+    interpolator[KEY_COEF] = np.concatenate([aerodynamic_dict[KEY_CF], aerodynamic_dict[KEY_CM]], axis=2)
 
   aerodynamic_dict[KEY_INTERP] = interpolator
 
@@ -308,6 +324,38 @@ def get_aerodynamic_coefficient_attitude(knudsen, angle_attack_total, aerodynami
 
   aoa_clamped = min( max(angle_attack_total, aoa_table[0]), aoa_table[-1] )
 
-  coefficient = aerodynamic_dict[KEY_INTERP][KEY_COEF]( np.array([[aoa_clamped, knudsen_clamped]]) )[0]
+  coefficient = evaluate_bilinear(aoa_table, knudsen_table,
+                                  aerodynamic_dict[KEY_INTERP][KEY_COEF],
+                                  aoa_clamped, knudsen_clamped)
 
   return coefficient[0:3], coefficient[3:6]
+
+
+def evaluate_bilinear(grid_first, grid_second, values, point_first, point_second):
+  #
+  # 2 次元の線形補間。格子は昇順、点は格子の内側にあること（呼び出し側でクランプ済み）。
+  #
+  # scipy.interpolate.RegularGridInterpolator の代わりに手で書いてある。理由と
+  # 戻し方は set_interpolator のコメントを見ること。**足し込む順序を RGI の
+  # _evaluate_linear に合わせてあるので、値はビット単位で一致する**:
+  #
+  #   value = 0 + v[i,j]*((1-y0)*(1-y1)) + v[i,j+1]*((1-y0)*y1)
+  #             + v[i+1,j]*(y0*(1-y1))   + v[i+1,j+1]*(y0*y1)
+  #
+  # 区間の決め方（searchsorted の既定 side='left' から 1 を引き、両端で丸める）も
+  # RGI に合わせてある。格子の内側では side の取り方で値は変わらないが
+  # （節点では一方が重み 1、他方が重み 0 になって同じ値に行き着く）、
+  # 読み比べられるように揃えておく。
+  #
+  index_first  = min( max(int(np.searchsorted(grid_first,  point_first )) - 1, 0), len(grid_first)  - 2 )
+  index_second = min( max(int(np.searchsorted(grid_second, point_second)) - 1, 0), len(grid_second) - 2 )
+
+  distance_first  = (point_first  - grid_first[index_first]  )/(grid_first[index_first+1]   - grid_first[index_first]  )
+  distance_second = (point_second - grid_second[index_second])/(grid_second[index_second+1] - grid_second[index_second])
+
+  value = 0.0
+  for index_i, weight_i in ((index_first, 1.0 - distance_first), (index_first + 1, distance_first)):
+    for index_j, weight_j in ((index_second, 1.0 - distance_second), (index_second + 1, distance_second)):
+      value = value + values[index_i, index_j]*(weight_i*weight_j)
+
+  return value

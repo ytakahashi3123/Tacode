@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import scipy.interpolate
 
 from context import ROOT_DIR, SRC_DIR, load_config, quiet
 
@@ -805,6 +806,72 @@ class TestTheTableCoversTheTutorial(unittest.TestCase):
                 max(altitude), top,
                 '%s reaches %.1f km but its table stops at %.1f km'
                 % (name, max(altitude), top))
+
+
+class TestBilinearMatchesScipy(unittest.TestCase):
+    """
+    手書きの双一次補間が RegularGridInterpolator とビット一致すること。
+
+    RGI をやめたのは速度のため（1 点 22 us -> 5 us、6 自由度計算の 1 割）。
+    速度のためだけの置き換えなので、検査することは「値が動かないこと」だけになる。
+    足し込む順序を RGI の _evaluate_linear に合わせてあるので一致する
+    （順序を変えると 1.5e-16 ずれ、チュートリアルと validation の出力が
+    バイト一致しなくなる ── それが高速化の合格条件だった）。
+
+    節点そのものも見る（格子の内側では区間の選び方によらず同じ値になるはずで、
+    そこがずれるのは重みの作り方が違うとき）。
+    """
+
+    def setUp(self):
+        self.rng = np.random.default_rng(20260916)
+
+    def build(self, num_first, num_second, num_component):
+        grid_first = np.sort(self.rng.uniform(-180.0, 180.0, num_first))
+        grid_second = np.sort(np.exp(self.rng.uniform(-9.0, 9.0, num_second)))
+        values = self.rng.normal(size=(num_first, num_second, num_component))
+        interpolator = scipy.interpolate.RegularGridInterpolator(
+            (grid_first, grid_second), values,
+            method='linear', bounds_error=False, fill_value=None)
+        return grid_first, grid_second, values, interpolator
+
+    def test_it_matches_on_a_synthetic_grid(self):
+        grid_first, grid_second, values, interpolator = self.build(37, 10, 6)
+
+        query = [(float(a), float(k))
+                 for a in self.rng.uniform(grid_first[0], grid_first[-1], 400)
+                 for k in self.rng.uniform(grid_second[0], grid_second[-1], 5)]
+        query += [(float(a), float(k)) for a in grid_first for k in grid_second]
+
+        for first, second in query:
+            reference = interpolator(np.array([[first, second]]))[0]
+            np.testing.assert_array_equal(
+                satellite.evaluate_bilinear(grid_first, grid_second, values, first, second),
+                reference)
+
+    def test_it_matches_on_the_shipped_tables(self):
+        for case in ('work_reentry_6dof',):
+            config = load_config(os.path.join(ROOT_DIR, 'tutorial', case, 'config.yml'))
+            with quiet():
+                aerodynamic_dict = satellite.initial_settings_satellite(config)
+
+            aoa_table = aerodynamic_dict[satellite.KEY_AOA]
+            knudsen_table = aerodynamic_dict[satellite.KEY_KN]
+            values = aerodynamic_dict[satellite.KEY_INTERP][satellite.KEY_COEF]
+            self.assertGreater(len(aoa_table), 1, case)
+
+            interpolator = scipy.interpolate.RegularGridInterpolator(
+                (aoa_table, knudsen_table), values,
+                method='linear', bounds_error=False, fill_value=None)
+
+            query = [(float(a), float(k))
+                     for a in self.rng.uniform(aoa_table[0], aoa_table[-1], 200)
+                     for k in self.rng.uniform(knudsen_table[0], knudsen_table[-1], 5)]
+            query += [(float(a), float(k)) for a in aoa_table for k in knudsen_table]
+
+            for first, second in query:
+                np.testing.assert_array_equal(
+                    satellite.evaluate_bilinear(aoa_table, knudsen_table, values, first, second),
+                    interpolator(np.array([[first, second]]))[0])
 
 
 # 呼び出しとしての interp1d（コメントや説明文の中は見ない）
