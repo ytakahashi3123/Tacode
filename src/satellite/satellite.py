@@ -128,11 +128,13 @@ def warn_if_not_axisymmetric(aerodynamic_dict):
 def set_interpolator(aerodynamic_dict):
   # 空力データベースの補間器を初期化時に 1 度だけ構築する
   # （大気側と同じく、毎ステップの再構築を避ける）
+  #
+  # 3 自由度の CD（Knudsen 数の 1 次元線形）はここに置かない。
+  # np.interp が補間器を作らずに同じ値を返すので、構築するものが無い
 
   print('Setting aerodynamic interpolator...')
 
   interpolator = {}
-  interpolator[KEY_CD_MEAN] = scipy.interpolate.interp1d(aerodynamic_dict[KEY_KN], aerodynamic_dict[KEY_CD_MEAN], kind="linear")
 
   # 迎角依存の係数表があるときだけ (AOA, Kn) の 2 次元補間器を作る。
   # 迎角が 1 つしかない表（従来の AOA 0 のみのファイル）では作らず、
@@ -269,19 +271,16 @@ def parse_aerodynamic_file(filename_tmp):
   return angle_of_attack, data_block
 
 
-def get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic, interpolator_aero):
+def get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic):
 
-  # Interpolate aerodynamic data from knudsen number of satellite
-  # 補間器は initial_settings_satellite で構築済みのものを評価するだけ
+  # Knudsen 数から 3 自由度の CD（迎角 0 ブロックの CFx）を線形補間する。
+  # 表の外側は端の値でクランプする（np.interp の既定の挙動そのもの。
+  # 6 自由度側の get_aerodynamic_coefficient_attitude と同じ扱い）。
+  #
+  # かつては scipy.interpolate.interp1d(kind='linear') を初期化時に作っていたが、
+  # interp1d は SciPy 1.10 以降 legacy で、np.interp が同じ値をビット単位で返す。
 
-  if knudsen < knudsen_aerodynamic[0] :
-    cdmean = cdmean_aerodynamic[0]
-  elif knudsen > knudsen_aerodynamic[-1] :
-    cdmean = cdmean_aerodynamic[-1]
-  else :
-    cdmean = interpolator_aero[KEY_CD_MEAN](knudsen)
-
-  return cdmean
+  return np.interp(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
 
 
 

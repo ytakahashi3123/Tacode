@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """大気・空力テーブルの読み込みと内挿のテスト。"""
 
+import glob
 import os
+import re
 import tempfile
 import unittest
 
 import numpy as np
 
-from context import ROOT_DIR, load_config, quiet
+from context import ROOT_DIR, SRC_DIR, load_config, quiet
 
 import atmosphere.atmosphere as atmosphere
 import satellite.satellite as satellite
@@ -269,15 +271,16 @@ class TestAerodynamicTable(unittest.TestCase):
             cls.aero = satellite.initial_settings_satellite(cls.config)
 
     def test_interpolator_is_prebuilt(self):
+        # 3 自由度の CD は np.interp で引くので補間器を持たない。
+        # 辞書に入るのは迎角依存の表を読んだときの (AOA, Kn) の補間器だけ
         self.assertIn(satellite.KEY_INTERP, self.aero)
-        self.assertIn(satellite.KEY_CD_MEAN, self.aero[satellite.KEY_INTERP])
+        self.assertNotIn(satellite.KEY_CD_MEAN, self.aero[satellite.KEY_INTERP])
 
     def _cd_at(self, knudsen):
         return satellite.get_aerodynamic_coefficient(
             knudsen,
             self.aero[satellite.KEY_KN],
-            self.aero[satellite.KEY_CD_MEAN],
-            self.aero[satellite.KEY_INTERP])
+            self.aero[satellite.KEY_CD_MEAN])
 
     def test_reproduces_table_nodes(self):
         kn_table = self.aero[satellite.KEY_KN]
@@ -786,6 +789,35 @@ class TestTheTableCoversTheTutorial(unittest.TestCase):
                 max(altitude), top,
                 '%s reaches %.1f km but its table stops at %.1f km'
                 % (name, max(altitude), top))
+
+
+# 呼び出しとしての interp1d（コメントや説明文の中は見ない）
+PATTERN_INTERP1D = re.compile(r'\binterp1d\s*\(')
+
+
+class TestTheSourceDoesNotUseLegacySciPy(unittest.TestCase):
+    """
+    scipy.interpolate.interp1d は SciPy 1.10 以降 legacy で、いつ消えてもおかしくない。
+
+    大気（3 次スプライン）は make_interp_spline(k=3) に、空力の CD（1 次元線形）は
+    np.interp に移した。どちらも interp1d の値とビット単位で一致することを確かめて
+    入れ替えてある（CubicSpline は同じ not-a-knot でも評価が PPoly になり 4e-16 ずれる
+    ので採らなかった）。呼び出しが戻ると将来の SciPy で落ちるので、ここで止める。
+    """
+
+    def test_no_module_calls_interp1d(self):
+        offending = []
+        for path in sorted(glob.glob(os.path.join(SRC_DIR, '**', '*.py'), recursive=True)):
+            with open(path) as stream:
+                for number, line in enumerate(stream, start=1):
+                    if line.strip().startswith('#'):
+                        continue
+                    if PATTERN_INTERP1D.search(line):
+                        offending.append('%s:%d: %s' % (os.path.relpath(path, SRC_DIR),
+                                                        number, line.strip()))
+        self.assertEqual(
+            offending, [],
+            'src/ が legacy の interp1d を呼んでいる:\n' + '\n'.join(offending))
 
 
 if __name__ == '__main__':

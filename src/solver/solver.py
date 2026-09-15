@@ -72,7 +72,6 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
   elif kind_aerodynamic_model == 'fileread' :
     knudsen_aerodynamic  = aerodynamic_dict['Knudsen_number']
     cdmean_aerodynamic   = aerodynamic_dict['CD_mean']
-    interpolator_aerodynamic = aerodynamic_dict[satellite.KEY_INTERP]
   else :
     print('kind_aerodynamic_model in config is incorrect.')
     print('Program stopped.')
@@ -175,7 +174,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
 
       # Aerodynamic coefficient
       if kind_aerodynamic_model == 'fileread' :
-        cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic, interpolator_aerodynamic)
+        cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
 
       # 対気速度。風が無効なら None のままで、以後は従来どおり ECEF 速度が使われる
       velocity_air = None
@@ -250,7 +249,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
 
         # Aerodynamic coefficient
         if kind_aerodynamic_model == 'fileread' :
-          cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic, interpolator_aerodynamic)
+          cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
 
         # 対気速度。各段の仮想位置で引く（大気量と同じ場所）。
         # 風が無効なら None のままで、以後は従来どおり ECEF 速度が使われる

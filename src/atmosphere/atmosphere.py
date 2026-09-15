@@ -130,9 +130,13 @@ def set_interpolator(atmosphere_dict):
 
   altitude_atm = atmosphere_dict[KEY_Height]
 
+  # scipy.interpolate.interp1d は SciPy 1.10 以降 legacy 扱いなので使わない。
+  # interp1d(kind='cubic') は内部で make_interp_spline(k=3) を作っていたので、
+  # これを直接呼ぶと係数も評価経路も同じで、値はビット単位で変わらない
+  # （CubicSpline は同じ not-a-knot でも評価が PPoly になり 4e-16 ずれる）。
   interpolator = {}
   for key_tmp in [KEY_Mass_density, KEY_Temperature_neutral, KEY_KN]:
-    interpolator[key_tmp] = scipy.interpolate.interp1d(altitude_atm, atmosphere_dict[key_tmp], kind="cubic")
+    interpolator[key_tmp] = scipy.interpolate.make_interp_spline(altitude_atm, atmosphere_dict[key_tmp], k=3)
 
   atmosphere_dict[KEY_INTERP] = interpolator
 
