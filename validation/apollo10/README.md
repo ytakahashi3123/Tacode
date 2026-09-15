@@ -17,7 +17,7 @@ together.
 
 ```bash
 cd validation/apollo10
-./run_tacode.sh                  # 2.9 s
+./run_tacode.sh                  # 1.9 s
 python3 compare_apollo10.py      # the numbers below, and the figures
 python3 entry_state.py           # the entry state of table II converted for config.yml
 python3 digitize_figure.py       # rebuild reference/ from the scanned report

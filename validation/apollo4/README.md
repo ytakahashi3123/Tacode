@@ -27,9 +27,9 @@ flies it.
 
 ```bash
 cd validation/apollo4
-./run_tacode.sh                            # drag only,   1.4 s
-./run_tacode.sh -file config_lift.yml      # measured bank, 3.6 s
-./run_tacode.sh -file config_6dof.yml      # 6-DOF,       19 s
+./run_tacode.sh                            # drag only,   1.0 s
+./run_tacode.sh -file config_lift.yml      # measured bank, 3.1 s
+./run_tacode.sh -file config_6dof.yml      # 6-DOF,       9.8 s
 python3 compare_apollo4.py                 # the numbers below, and the figures
 python3 compare_apollo4.py --no-figure
 python3 compare_apollo4.py --nose-radius 3.048

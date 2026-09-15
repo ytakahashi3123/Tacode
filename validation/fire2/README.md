@@ -51,10 +51,10 @@ of the intervals that happen to agree.
 
 ```bash
 cd validation/fire2
-./run_tacode.sh                             # 3-DOF, drag only, 3.0 s
+./run_tacode.sh                             # 3-DOF, drag only, 2.0 s
 ./run_tacode.sh -file config_matched.yml    # the same at table V's own drag
-./run_tacode.sh -file config_6dof.yml       # 6-DOF, 24 s
-python3 run_segments.py                     # 6-DOF as a chain over the shield ejections, 26 s
+./run_tacode.sh -file config_6dof.yml       # 6-DOF, 12 s
+python3 run_segments.py                     # 6-DOF as a chain over the shield ejections, 14 s
 python3 compare_fire2.py                    # the trajectory numbers, and figures
 python3 compare_attitude.py                 # the attitude numbers, and a figure
 ```
