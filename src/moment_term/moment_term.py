@@ -17,6 +17,7 @@
 import numpy as np
 import sys as sys
 import attitude.attitude as attitude
+from general.general import cross_product, vector_norm
 
 # Dict key
 KEY_INERTIA      = 'inertia_tensor'
@@ -95,8 +96,8 @@ def moment_routine(config, property_dict, coordinate, matrix_be, omega_relative,
   # --係数は空力データベースの基準点まわりなので、重心へ移す項を加える
   if property_dict[KEY_FLAG_AERO] :
     fact_moment = dynamic_pressure*area_satellite*length_satellite
-    moment[1,:] = fact_moment*np.array(coefficient_moment_body) \
-                + np.cross(-property_dict[KEY_CG], force_aerodynamic_body)
+    moment[1,:] = fact_moment*np.asarray(coefficient_moment_body) \
+                + cross_product(-property_dict[KEY_CG], force_aerodynamic_body)
 
   # 空力モーメント（動的減衰）
   # --M = q S L * (L/2V) * [Clp*p, Cmq*q, Cnr*r]。角速度は大気（ECEF）に対するもの
@@ -111,10 +112,10 @@ def moment_routine(config, property_dict, coordinate, matrix_be, omega_relative,
     gravity_const_planet = config['planet']['gravitational_constant']
     mass_planet          = config['planet']['mass']
 
-    radius_pmass = np.linalg.norm(coordinate)
-    unit_body    = np.dot(matrix_be, np.array(coordinate)/radius_pmass)
+    radius_pmass = vector_norm(coordinate)
+    unit_body    = np.dot(matrix_be, np.asarray(coordinate)/radius_pmass)
     fact_gravity = 3.0*gravity_const_planet*mass_planet/radius_pmass**3
-    moment[3,:]  = fact_gravity*np.cross(unit_body, np.dot(property_dict[KEY_INERTIA], unit_body))
+    moment[3,:]  = fact_gravity*cross_product(unit_body, np.dot(property_dict[KEY_INERTIA], unit_body))
 
   # Total
   moment[0,:] = moment[1,:] + moment[2,:] + moment[3,:]
@@ -129,6 +130,6 @@ def solve_angular_acceleration(property_dict, omega_inertial, moment_total):
   # omega は慣性系に対する角速度の機体軸成分。ECEF に対する角速度ではないので注意。
   #
   angular_momentum = np.dot(property_dict[KEY_INERTIA], omega_inertial)
-  gyroscopic       = np.cross(omega_inertial, angular_momentum)
+  gyroscopic       = cross_product(omega_inertial, angular_momentum)
 
-  return np.dot(property_dict[KEY_INERTIA_INV], np.array(moment_total) - gyroscopic)
+  return np.dot(property_dict[KEY_INERTIA_INV], moment_total - gyroscopic)

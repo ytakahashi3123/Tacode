@@ -13,7 +13,7 @@ import moment_term.moment_term as moment_term
 import satellite.satellite as satellite
 import wind.wind as wind
 from orbital.orbital import orbital
-from general.general import get_setting
+from general.general import get_setting, vector_norm
 
 # Constants
 one_sixth = 1.0/6.0
@@ -356,7 +356,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
                                                     time_elapsed + delta_time)
         flag_warned_timestep = check_timestep_attitude(delta_time, attitude_property, aerodynamic_dict, \
                                                        kind_aerodynamic_model, stability_derivative, \
-                                                       density_factor*density, np.linalg.norm(veloc_aero_tmp), \
+                                                       density_factor*density, vector_norm(veloc_aero_tmp), \
                                                        knudsen, area_satellite, length_satellite)
 
     iteration    = iteration + 1
@@ -364,7 +364,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
     time_elapsed = time_elapsed_initial + float(iteration - iteration_initial)*delta_time
 
     coord_geodetic_display = np.multiply(coord_geodetic, orbital.unit_convert_geoditic)
-    veloc_polar_mag = np.linalg.norm(veloc_polar)
+    veloc_polar_mag = vector_norm(veloc_polar)
     #print("Time elapsed:", time_elapsed, 'Longitude:', coord_geodetic_display[0], 'Latitude:', coord_geodetic_display[1], 'Altitude:', coord_geodetic_display[2], 'Velocity (Mag.)',veloc_polar_mag )
     print('{:.1f}'.format(time_elapsed)+', '+'{:.3f}'.format(coord_geodetic_display[0])+', '+'{:.3f}'.format(coord_geodetic_display[1])+', '+'{:.3f}'.format(coord_geodetic_display[2])+', '+'{:.3f}'.format(veloc_polar_mag) )
 
@@ -415,8 +415,8 @@ def solve_eulerexplicit(dt, mass, force, coord_tmp, veloc_tmp, r_res, v_res):
   coord_tmp = coord_tmp + dr
 
   # Discrepancies from the previous step
-  v_res = v_res + np.linalg.norm(dv)**2
-  r_res = r_res + np.linalg.norm(dr)**2
+  v_res = v_res + vector_norm(dv)**2
+  r_res = r_res + vector_norm(dr)**2
 
   return coord_tmp, veloc_tmp, r_res, v_res
 
@@ -438,8 +438,8 @@ def solve_rungekutta(m, dt, mass, force, coord_tmp, veloc_tmp, r_virtual, v_virt
   r_virtual = r_virprev + fact_rk[m]*kr_rk
 
   # Discrepancies from the previous step
-  v_res = v_res + np.linalg.norm(dv)**2
-  r_res = r_res + np.linalg.norm(dr)**2
+  v_res = v_res + vector_norm(dv)**2
+  r_res = r_res + vector_norm(dr)**2
  
   return coord_tmp, veloc_tmp, r_virtual, v_virtual, r_res, v_res
 
@@ -464,8 +464,8 @@ def get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aero
   matrix_be  = attitude.quaternion_to_matrix(quaternion)
 
   velocity_aero = velocity if velocity_air is None else velocity_air
-  velocity_body = np.dot(matrix_be, np.array(velocity_aero))
-  velocity_mag  = np.linalg.norm(velocity_body)
+  velocity_body = np.dot(matrix_be, velocity_aero)
+  velocity_mag  = vector_norm(velocity_body)
 
   alpha, beta, alpha_total, phi_aero = attitude.get_aerodynamic_angle(velocity_body)
 
@@ -487,7 +487,7 @@ def get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aero
 
   # 力の符号: CFx > 0（= 迎角 0 での CD）が -x 方向（後ろ向き）の力になるようにとる。
   # これで迎角 0 では 3 自由度の抗力と一致する。
-  force_aerodynamic_body = -dynamic_pressure*area_satellite*np.array(coefficient_force_body)
+  force_aerodynamic_body = -dynamic_pressure*area_satellite*coefficient_force_body
   force_aerodynamic      = np.dot(matrix_be.T, force_aerodynamic_body)/mass_satellite
 
   omega_relative = attitude.get_omega_relative(omega_inertial, rotation_rate_planet, matrix_be)
@@ -541,7 +541,7 @@ def set_divergence_limit(config, coordinate_initial):
   factor_radius   = float( get_setting(section, 'factor_radius_maximum', 10.0) )
   factor_velocity = float( get_setting(section, 'factor_velocity_maximum', 10.0) )
 
-  radius_initial = np.linalg.norm(coordinate_initial)
+  radius_initial = vector_norm(coordinate_initial)
 
   # 初期位置での脱出速度 sqrt(2 GM/r)
   parameter_gravitational = config['planet']['gravitational_constant']*config['planet']['mass']
@@ -567,11 +567,11 @@ def check_divergence(coordinate, velocity, radius_maximum, velocity_maximum, tim
   if not np.all( np.isfinite(state) ) :
     message = 'the state is not a finite number (NaN or Inf)'
   else :
-    radius = np.linalg.norm(coordinate)
+    radius = vector_norm(coordinate)
     if radius > radius_maximum :
       message = 'the geocentric distance {:.6g} m is beyond the limit {:.6g} m'.format(radius, radius_maximum)
     else :
-      velocity_magnitude = np.linalg.norm(velocity)
+      velocity_magnitude = vector_norm(velocity)
       if velocity_magnitude > velocity_maximum :
         message = 'the velocity {:.6g} m/s is beyond the limit {:.6g} m/s'.format(velocity_magnitude, velocity_maximum)
 

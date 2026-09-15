@@ -28,7 +28,7 @@ import sys as sys
 # config を既定値つきで読む共通関数。実体は general.py にある
 # （姿勢だけでなくエポック・風のセクションも同じ扱いにするため）。
 # 既存の呼び出し（attitude.get_setting）を壊さないよう、ここから再輸出する。
-from general.general import get_setting
+from general.general import get_setting, vector_norm
 
 # Dict key
 KEY_QUATERNION       = 'quaternion'
@@ -37,12 +37,12 @@ KEY_ANGULAR_VELOCITY = 'angular_velocity'
 
 def quaternion_normalize(quaternion):
   # 数値積分で単位長からずれるので毎ステップ正規化する
-  norm = np.linalg.norm(quaternion)
+  norm = vector_norm(quaternion)
   if norm <= 0.0 :
     print('Quaternion norm became zero.')
     print('Program stopped.')
     sys.exit(1)
-  return np.array(quaternion)/norm
+  return np.asarray(quaternion)/norm
 
 
 def quaternion_to_matrix(quaternion):
@@ -202,7 +202,7 @@ def get_earth_rate_body(rotation_rate_planet, matrix_be):
 
 def get_omega_relative(omega_inertial, rotation_rate_planet, matrix_be):
   # ECEF に対する角速度（機体軸成分）
-  return np.array(omega_inertial) - get_earth_rate_body(rotation_rate_planet, matrix_be)
+  return omega_inertial - get_earth_rate_body(rotation_rate_planet, matrix_be)
 
 
 def get_aerodynamic_angle(velocity_body):
@@ -215,7 +215,7 @@ def get_aerodynamic_angle(velocity_body):
   #  phi_aero    : 空力ロール角 atan2(v, w)。係数表（x-z 面）を実際の
   #                横流れ面に回すのに使う
   #
-  velocity_mag = np.linalg.norm(velocity_body)
+  velocity_mag = vector_norm(velocity_body)
   if velocity_mag <= 0.0 :
     return 0.0, 0.0, 0.0, 0.0
 

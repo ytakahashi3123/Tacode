@@ -3,7 +3,7 @@
 import numpy as np
 import os as os
 import sys as sys
-from general.general import general
+from general.general import general, vector_norm
 import attitude.attitude as attitude
 import coordinate_system.coordinate_system as coordinate_system
 import epoch.epoch as epoch_module
@@ -416,7 +416,7 @@ class orbital(general):
 
     if len(state) == self.NUM_COLUMN_RESTART_6DOF :
       quaternion = np.array(state[6:10])
-      norm_tmp   = np.linalg.norm(quaternion)
+      norm_tmp   = vector_norm(quaternion)
       if abs(norm_tmp - 1.0) > self.TOLERANCE_QUATERNION_NORM :
         # 正規化して黙って進めない。単位長から外れているのは書き写しの誤りか、
         # 発散した計算の残骸で、どちらも「続きを計算してよい状態」ではない
@@ -563,7 +563,7 @@ class orbital(general):
           #str_coord_cart = str(coordinate_cart[n][0]*self.m2km)   + self.blank_code +str(coordinate_cart[n][1]*self.m2km)    + self.blank_code + str(coordinate_cart[n][2]*self.m2km) 
           #str_coord_geod = str(coordinate_geod[n][0]*self.rad2deg)+ self.blank_code +str(coordinate_geod[n][1]*self.rad2deg) + self.blank_code + str(coordinate_geod[n][2]*self.m2km) 
           #str_veloc_pola = str(velocity_pola[n][0])               + self.blank_code +str(velocity_pola[n][1])                + self.blank_code + str(velocity_pola[n][2]) + str(velo_abs)
-          str_veloc_pola = str_veloc_pola + str(np.linalg.norm(velocity_pola[n])) + self.blank_code
+          str_veloc_pola = str_veloc_pola + str(vector_norm(velocity_pola[n])) + self.blank_code
           str_traj       = str(density_traj[n]) + self.blank_code + str(temperature_traj[n]) + self.blank_code + str(knudsen_traj[n]) 
           #
           str_wind     = ''
@@ -574,7 +574,7 @@ class orbital(general):
                                                              velocity_cart[n], wind_dict, time_tmp)
             for m in range(0,3):
               str_wind = str_wind + self.blank_code + str(wind_local[m])
-            str_wind = str_wind + self.blank_code + str(np.linalg.norm(velocity_air))
+            str_wind = str_wind + self.blank_code + str(vector_norm(velocity_air))
           #
           str_attitude = ''
           if flag_attitude :

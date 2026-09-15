@@ -78,12 +78,28 @@ class TestAtmosphereTable(unittest.TestCase):
         補間器が初期化時に構築されて dict に入っていること（レビュー C-1 の回帰）。
 
         評価のたびに構築し直す実装に戻ると、この鍵が無くなるか使われなくなる。
+        補間器は 3 つの量をまとめた**ベクトル値スプライン 1 本**で、
+        成分の並びは KEYS_INTERPOLATED（密度・温度・Kn）。
         """
         self.assertIn(atmosphere.KEY_INTERP, self.atm)
-        for key in (atmosphere.KEY_Mass_density,
-                    atmosphere.KEY_Temperature_neutral,
-                    atmosphere.KEY_KN):
-            self.assertIn(key, self.atm[atmosphere.KEY_INTERP])
+        self.assertEqual(atmosphere.KEYS_INTERPOLATED,
+                         [atmosphere.KEY_Mass_density,
+                          atmosphere.KEY_Temperature_neutral,
+                          atmosphere.KEY_KN])
+
+        interpolator = self.atm[atmosphere.KEY_INTERP]
+        altitude = self.atm[atmosphere.KEY_Height]
+        value = interpolator(0.5*(altitude[0] + altitude[-1]))
+        self.assertEqual(value.shape, (len(atmosphere.KEYS_INTERPOLATED),))
+
+        # 1 本にまとめても、量ごとに作ったスプラインとビット一致すること
+        # （まとめたのは速度のため。RK4 の各段で 3 回評価するのをやめられる）
+        import scipy.interpolate
+        for index, key in enumerate(atmosphere.KEYS_INTERPOLATED):
+            spline = scipy.interpolate.make_interp_spline(altitude, self.atm[key], k=3)
+            for fraction in (0.13, 0.5, 0.77):
+                query = altitude[0] + fraction*(altitude[-1] - altitude[0])
+                self.assertEqual(float(interpolator(query)[index]), float(spline(query)))
 
     def _property_at(self, altitude_km, atm=None):
         return atmosphere.get_atmosphere_property(altitude_km, atm if atm is not None else self.atm)

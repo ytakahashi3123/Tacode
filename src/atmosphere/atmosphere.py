@@ -28,6 +28,9 @@ KEY_O      = 'O'
 KEY_Mass_density = 'Mass_density'
 KEY_Temperature_neutral = 'Temperature_neutral'
 
+# 補間する量と、ベクトル値スプラインの成分の並び
+KEYS_INTERPOLATED = [KEY_Mass_density, KEY_Temperature_neutral, KEY_KN]
+
 # テーブル上端でスケールハイトをフィットする高度幅, km
 RANGE_FIT_SCALE_HEIGHT = 50.0
 
@@ -134,9 +137,14 @@ def set_interpolator(atmosphere_dict):
   # interp1d(kind='cubic') は内部で make_interp_spline(k=3) を作っていたので、
   # これを直接呼ぶと係数も評価経路も同じで、値はビット単位で変わらない
   # （CubicSpline は同じ not-a-knot でも評価が PPoly になり 4e-16 ずれる）。
-  interpolator = {}
-  for key_tmp in [KEY_Mass_density, KEY_Temperature_neutral, KEY_KN]:
-    interpolator[key_tmp] = scipy.interpolate.make_interp_spline(altitude_atm, atmosphere_dict[key_tmp], k=3)
+  #
+  # 3 つの量は 1 本のベクトル値スプラインにまとめる。節点も帯行列も列ごとに独立なので
+  # 係数は 3 本作るのと同じで、値はビット単位で一致する（実テーブル 2 種で確認済み）。
+  # RK4 の各段で 3 回呼ぶのをやめられるぶんだけ速い（実測 4.2 us -> 1.4 us）。
+  interpolator = scipy.interpolate.make_interp_spline(
+                   altitude_atm,
+                   np.stack([atmosphere_dict[key_tmp] for key_tmp in KEYS_INTERPOLATED], axis=1),
+                   k=3)
 
   atmosphere_dict[KEY_INTERP] = interpolator
 
@@ -378,10 +386,11 @@ def get_atmosphere_property(altitude, atmosphere_dict):
       knudsen     = knudsen_atm[-1]/factor
 
   else :
-    interpolator_atm = atmosphere_dict[KEY_INTERP]
-    density       = interpolator_atm[KEY_Mass_density](altitude)
-    temperature   = interpolator_atm[KEY_Temperature_neutral](altitude)
-    knudsen       = interpolator_atm[KEY_KN](altitude)
+    # 1 回の評価で 3 つとも得る（KEYS_INTERPOLATED の並び）
+    value_atm = atmosphere_dict[KEY_INTERP](altitude)
+    density     = value_atm[0]
+    temperature = value_atm[1]
+    knudsen     = value_atm[2]
 
   return density, temperature, knudsen
 

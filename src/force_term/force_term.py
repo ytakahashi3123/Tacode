@@ -6,7 +6,7 @@
 import sys as sys
 import numpy as np
 from orbital.orbital import orbital
-from general.general import get_setting
+from general.general import cross_product, get_setting, vector_norm
 
 
 def get_bank_angle(config, time_elapsed):
@@ -48,18 +48,18 @@ def get_lift_direction(coordinate, velocity_aero, angle_bank):
   # 速度が鉛直と平行なときは「面」が定まらない。そのとき揚力は 0 とする
   # （真上・真下に飛んでいる瞬間だけで、軌道計算では起きない）。
   #
-  direction_velocity = velocity_aero/np.linalg.norm(velocity_aero)
-  direction_up       = coordinate/np.linalg.norm(coordinate)
+  direction_velocity = velocity_aero/vector_norm(velocity_aero)
+  direction_up       = coordinate/vector_norm(coordinate)
 
   # 速度に直交する成分（バンク 0 の向き）
   component_up = direction_up - np.dot(direction_up, direction_velocity)*direction_velocity
-  magnitude_up = np.linalg.norm(component_up)
+  magnitude_up = vector_norm(component_up)
   if magnitude_up <= 0.0 :
     return np.zeros(3)
   component_up = component_up/magnitude_up
 
   # 進行方向の右側（東向きに飛んでいれば南）
-  component_right = np.cross(direction_velocity, component_up)
+  component_right = cross_product(direction_velocity, component_up)
 
   return np.cos(angle_bank)*component_up + np.sin(angle_bank)*component_right
 
