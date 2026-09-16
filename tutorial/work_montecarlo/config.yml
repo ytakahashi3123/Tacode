@@ -266,7 +266,13 @@ montecarlo:
   number_iteration: 16
   
   # Maximum number of execution in parallel
-  maximum_number_execution: 8
+  # --auto: as many as this machine has logical cores. A number fixed here only
+  #   suits the machine it was written on, and the cases are independent
+  #   processes, so the memory in use grows with it (about 90 MB per case).
+  # --The cases are launched in batches of this size and every batch is waited
+  #   for before the next one starts, so a batch costs as much as its slowest
+  #   case.
+  maximum_number_execution: auto
 
   # Stop if any case does not complete (False, the default), or go on with the
   # cases that did complete (True)

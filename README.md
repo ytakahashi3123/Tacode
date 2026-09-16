@@ -664,6 +664,14 @@ Tutorial case: `tutorial/work_montecarlo`.
 It copies `tutorial/template` for each case and runs them in parallel
 (`number_iteration` cases, up to `maximum_number_execution` at a time).
 
+`maximum_number_execution: auto`, which is what the shipped cases use, takes as many
+cases at once as the machine has logical cores; a number may be given instead. The cases
+are launched in batches of that size and each batch is waited for before the next one
+starts, so a batch costs as much as its slowest case and the gain is less than the ratio
+of the two numbers: on a 24-core machine the 100 cases of the wind tutorial take 7.0 s at
+`auto` against 9.4 s at 8. They are independent processes, so the memory in use grows
+with the number, about 90 MB per case.
+
 Each entry of `montecarlo.target_variable` is `[variable, section, dispersion]`. The
 nominal value is read from the Monte-Carlo control file, and the matching lines of the
 copied control file are overwritten case by case with

@@ -58,6 +58,9 @@ class montecarlo(orbital):
     self.root_dir   = os.getcwd()
     self.cmd_home = os.path.dirname(os.path.realpath(__file__)) + '/..'
 
+    # 同時に走らせるケース数（'auto' ならこのマシンのコア数）
+    self.maximum_number_execution = self.get_maximum_number_execution(config)
+
     # Counter
     self.iter = 1
 
@@ -182,12 +185,44 @@ class montecarlo(orbital):
     return
 
 
+  def get_maximum_number_execution(self, config):
+    #
+    # 同時に走らせるケースの数。
+    #
+    # **'auto' ならこのマシンの論理コア数**にする。台数ぶんの数字を tutorial の
+    # config に焼き込むと、書いた人の機械でしか合わないため。ケース数より多く
+    # 走らせることはできないので、そこで頭を打つ。
+    #
+    # 走るのは互いに独立した子プロセスなので、上げると同時に使うメモリも比例して
+    # 増える（1 ケースおよそ 90 MB）。
+    #
+    setting          = config['montecarlo']['maximum_number_execution']
+    number_iteration = config['montecarlo']['number_iteration']
+
+    if isinstance(setting, str) :
+      if setting.strip().lower() != 'auto' :
+        print('montecarlo.maximum_number_execution must be a positive integer or "auto":', setting)
+        print('Program stopped.')
+        sys.exit(1)
+      number = os.cpu_count() or 1
+      print('--Cases at the same time:', number, '(auto)')
+    else :
+      number = int(setting)
+
+    if number < 1 :
+      print('montecarlo.maximum_number_execution must be a positive integer or "auto":', setting)
+      print('Program stopped.')
+      sys.exit(1)
+
+    return min(number, number_iteration)
+
+
   def run_tacode(self,config):
     import subprocess
     # Tacodeの実行
 
     num_iteration = config['montecarlo']['number_iteration']
-    maximum_number_execution = config['montecarlo']['maximum_number_execution']
+    maximum_number_execution = self.maximum_number_execution
     
     # 計算ディレクトリに移動、実行、元ディレクトリに戻る
     # --戻すのはtry/finallyの中。途中で例外が出たまま戻らないと、以降のケースが

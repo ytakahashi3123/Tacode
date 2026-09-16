@@ -35,7 +35,7 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
 
-from context import ROOT_DIR, load_config
+from context import ROOT_DIR, load_config, quiet
 
 from montecarlo.montecarlo import montecarlo
 
@@ -352,6 +352,39 @@ class TestFindingTheCaseDirectories(unittest.TestCase):
             case_list = [os.path.basename(path)
                          for path in montecarlo_dispersion.find_case_directory(directory)]
             self.assertEqual(case_list, ['case0001', 'case0002'])
+
+
+class TestTheNumberOfCasesAtOnce(unittest.TestCase):
+    """
+    montecarlo.maximum_number_execution。
+
+    ケースを何本ずつ同時に走らせるか。台数ぶんの数字を config に焼き込むと書いた人の
+    機械でしか合わないので 'auto' を受ける。ケース数より多く走らせることはできない。
+    """
+
+    @staticmethod
+    def _number(setting, number_iteration=100):
+        config = {'montecarlo': {'maximum_number_execution': setting,
+                                 'number_iteration': number_iteration}}
+        with quiet():
+            return montecarlo().get_maximum_number_execution(config)
+
+    def test_a_number_is_used_as_it_is(self):
+        self.assertEqual(self._number(8), 8)
+
+    def test_auto_is_the_number_of_cores(self):
+        self.assertEqual(self._number('auto'), os.cpu_count() or 1)
+        self.assertEqual(self._number('AUTO'), os.cpu_count() or 1)
+
+    def test_it_never_exceeds_the_number_of_cases(self):
+        # 3 ケースしかないのに 8 本立ち上げようとしない
+        self.assertEqual(self._number(8, number_iteration=3), 3)
+        self.assertEqual(self._number('auto', number_iteration=2), 2)
+
+    def test_a_meaningless_setting_stops_the_run(self):
+        for setting in ('all', 'eight', 0, -1):
+            with self.assertRaises(SystemExit):
+                self._number(setting)
 
 
 class TestTheRandomSeed(unittest.TestCase):
