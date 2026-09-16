@@ -37,10 +37,6 @@ tutorial/*/attitude.html
 tutorial/*/attitude.mp4
 tutorial/*/attitude.png
 
-# The wind-table case is a demonstration, not a reference output
-tutorial/work_reentry_wind_table/output_result/
-tutorial/work_reentry_wind_table/output_restart/
-
 # Validation runs (the cases are reproducible; their numbers are recorded in the READMEs)
 validation/*/output_*/
 
@@ -57,8 +53,10 @@ report/
 .vscode/
 
 # NOTE:
-# tutorial/work/output_result/ and tutorial/work/output_restart/ are tracked
-# on purpose as reference outputs. Do not ignore them.
+# The output_result/ and output_restart/ of tutorial/work, work_reentry,
+# work_reentry_6dof and work_reentry_wind_table are tracked on purpose as
+# reference outputs (test_regression_3dof.py, test_regression_6dof.py).
+# Do not ignore them.
 
 # Local-only notes (not published)
 CLAUDE.md

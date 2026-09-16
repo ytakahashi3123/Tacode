@@ -29,8 +29,10 @@ import numpy as np
 from context import ROOT_DIR, load_config, quiet, reference_mismatch
 
 import atmosphere.atmosphere as atmosphere
+import epoch.epoch as epoch
 import satellite.satellite as satellite
 import solver.solver as solver
+import wind.wind as wind_module
 from orbital.orbital import orbital
 
 RELATIVE_TOLERANCE = 1.e-9
@@ -59,8 +61,11 @@ def run_case(config, directory):
     config['restart_process']['directory_output'] = os.path.join(directory, 'output_restart')
 
     with quiet():
+        # 風もエポックも、切ってあるケースでは None が返って従来どおりの経路になる
+        epoch_dict = epoch.initial_settings_epoch(config)
         atmosphere_dict = atmosphere.initial_settings_atmosphere(config)
         aerodynamic_dict = satellite.initial_settings_satellite(config)
+        wind_dict = wind_module.initial_settings_wind(config, epoch_dict)
 
         orb = orbital()
         orb.make_directory_output(config)
@@ -74,12 +79,15 @@ def run_case(config, directory):
         iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = \
             solver.solve_equation_motion(config, iteration, time_elapsed,
                                          coordinate_dict, velocity_dict, trajectory_dict,
-                                         atmosphere_dict, aerodynamic_dict, attitude_dict)
+                                         atmosphere_dict, aerodynamic_dict, attitude_dict,
+                                         wind_dict)
 
         orb.output_tecplot(config, iteration, time_elapsed,
-                           coordinate_dict, velocity_dict, trajectory_dict, attitude_dict)
+                           coordinate_dict, velocity_dict, trajectory_dict, attitude_dict,
+                           epoch_dict, wind_dict)
         orb.output_restart(config, iteration, time_elapsed,
-                           coordinate_dict['cartesian'], velocity_dict['cartesian'], attitude_dict)
+                           coordinate_dict['cartesian'], velocity_dict['cartesian'], attitude_dict,
+                           epoch_dict)
 
     return attitude_dict, iteration
 
@@ -87,7 +95,7 @@ def run_case(config, directory):
 class TestReferenceOutputs(unittest.TestCase):
     """リポジトリに入っている参照出力を再現できること。"""
 
-    CASES = ('work', 'work_reentry')
+    CASES = ('work', 'work_reentry', 'work_reentry_wind_table')
 
     def assert_matches_reference(self, rows, rows_ref, label):
         """参照出力と一致することを見る（判定は context.reference_mismatch と共有）。"""
@@ -139,6 +147,14 @@ class TestReferenceOutputs(unittest.TestCase):
 
     def test_reentry_case(self):
         self.check_case('work_reentry')
+
+    def test_reentry_through_a_wind_table(self):
+        #
+        # 風を読む経路の回帰。テーブルの読み取り・多次元内挿・対気速度の作り方の
+        # どれかが結果を動かしたらここで落ちる（出力には WindE/WindN/WindU/VelairAbs の
+        # 4 列も載るので、列の構成ごと見ていることになる）。
+        #
+        self.check_case('work_reentry_wind_table')
 
 
 class TestAttitudeSectionSwitchedOff(unittest.TestCase):
