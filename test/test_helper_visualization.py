@@ -296,6 +296,7 @@ class TestCoastline(unittest.TestCase):
         self.assertEqual(coastline.RADIUS_PLANET, animate_trajectory.RADIUS_PLANET)
 
 
+@unittest.skipUnless(HAS_MATPLOTLIB, 'matplotlib is not installed')
 class TestAnimationScript(unittest.TestCase):
     """CLI が実際に絵を書けること。1 コマだけ書かせて確かめる。"""
 

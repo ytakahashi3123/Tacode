@@ -37,6 +37,10 @@ SCRIPT = {'animate_trajectory': os.path.join(ROOT_DIR, 'src_helper', 'animate_tr
           'montecarlo_animation': os.path.join(ROOT_DIR, 'src_helper', 'montecarlo_animation',
                                                'montecarlo_animation.py')}
 
+# 読み込むだけで matplotlib を要求するのはこのツールだけ。他の 2 つは
+# 入っていなければ絵を飛ばして正常終了する。
+NEEDS_MATPLOTLIB = ('animate_trajectory',)
+
 try:
     import matplotlib  # noqa: F401
     HAS_MATPLOTLIB = True
@@ -267,6 +271,8 @@ class TestTheTutorialSettings(unittest.TestCase):
                 content = yaml.safe_load(f)
             for section in content:
                 self.assertIn(section, SCRIPT, path)
+                if section in NEEDS_MATPLOTLIB and not HAS_MATPLOTLIB:
+                    continue
                 with tempfile.TemporaryDirectory() as directory:
                     written = os.path.join(directory, 'config_helper.yml')
                     completed = subprocess.run(
