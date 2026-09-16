@@ -254,7 +254,7 @@ class TestCouplingWithTheTranslation(unittest.TestCase):
             aerodynamic_dict = satellite.initial_settings_satellite(config)
             moment, property_dict = moment_term.moment_initialsettings(config)
 
-        force_aerodynamic, moment_total, omega_relative = solver.get_aerodynamic_state(
+        acceleration_aerodynamic, moment_total, omega_relative = solver.get_aerodynamic_state(
             config, property_dict, aerodynamic_dict, 'constant',
             coordinate, velocity, quaternion, np.zeros(3),
             config['satellite']['mass'], config['satellite']['characteristic_area'],
@@ -263,14 +263,14 @@ class TestCouplingWithTheTranslation(unittest.TestCase):
             config['satellite']['drag_coefficient'], config['attitude']['static_stability_derivative'],
             config['planet']['rotation_rate'], moment)
 
-        force = force_term.force_initialsettings(config)
-        force = force_term.force_routine(config, coordinate, velocity,
+        acceleration = force_term.acceleration_initialsettings(config)
+        acceleration = force_term.acceleration_routine(config, coordinate, velocity,
                                          config['satellite']['mass'],
                                          config['satellite']['characteristic_area'],
                                          config['satellite']['drag_coefficient'], 1.0,
-                                         config['atmosphere']['density'], force)
+                                         config['atmosphere']['density'], acceleration)
 
-        np.testing.assert_allclose(force_aerodynamic, force[4, :], rtol=1.e-12)
+        np.testing.assert_allclose(acceleration_aerodynamic, acceleration[4, :], rtol=1.e-12)
         # 迎角 0 なので復元モーメントも立たない
         np.testing.assert_allclose(moment[1, :], np.zeros(3), atol=1.e-12)
 

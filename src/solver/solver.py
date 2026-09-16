@@ -78,7 +78,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
     sys.exit(1)
 
   # Force setting
-  force = force_term.force_initialsettings(config)
+  acceleration = force_term.acceleration_initialsettings(config)
 
   # Wind setting
   # --wind_dict が None なら大気は地球と共回転し、ECEF 速度がそのまま対気速度になる（従来の仮定）
@@ -190,28 +190,28 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
 
       # Aerodynamics depending on the attitude
       if flag_attitude :
-        force_aerodynamic, moment_total, omega_relative \
+        acceleration_aerodynamic, moment_total, omega_relative \
           = get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aerodynamic_model, \
                                   coord_tmp, veloc_tmp, quat_tmp, omega_tmp, \
                                   mass_satellite, area_satellite, length_satellite, \
                                   density, density_factor, knudsen, cdmean, stability_derivative, \
                                   rotation_rate_planet, moment, velocity_air)
       else :
-        force_aerodynamic = None
+        acceleration_aerodynamic = None
 
-      # Calculate force
+      # Calculate acceleration
       # --揚力のバンク角は時刻に依り得る（表で与えるとき）。段の時刻で引く
       angle_bank = force_term.get_bank_angle(config, time_elapsed)
-      force = force_term.force_routine(config, coord_tmp, veloc_tmp,   \
+      acceleration = force_term.acceleration_routine(config, coord_tmp, veloc_tmp,   \
                                        mass_satellite, area_satellite, \
-                                       cdmean, density_factor, density, force, force_aerodynamic, velocity_air,
+                                       cdmean, density_factor, density, acceleration, acceleration_aerodynamic, velocity_air,
                                        angle_bank)
       #"density factor" added by Tomoki Sakai 2023/2/3
-      force_total = force[0,:]
+      acceleration_total = acceleration[0,:]
  
       # Update solution and Calculate residual
       coord_tmp, veloc_tmp, \
-      r_res, v_res =  solve_eulerexplicit(delta_time, mass_satellite, force_total, \
+      r_res, v_res =  solve_eulerexplicit(delta_time, acceleration_total, \
                                           coord_tmp, veloc_tmp, \
                                           r_res, v_res)
 
@@ -266,7 +266,7 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
           temperature_output = temperature
           knudsen_output     = knudsen
 
-        # External force (but "Delta V" is given here)
+        # External acceleration (but "Delta V" is given here)
         # --Not yet
         # --Convert cartesian coordinate
         #set_angle_longlat_cartesian(r_virtual, longitude_tmp, latitude_tmp)
@@ -277,30 +277,29 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
         # Aerodynamics depending on the attitude
         # --各段の仮想状態で評価する（姿勢と軌道は双方向に結合している）
         if flag_attitude :
-          force_aerodynamic, moment_total, omega_relative \
+          acceleration_aerodynamic, moment_total, omega_relative \
             = get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aerodynamic_model, \
                                     r_virtual, v_virtual, q_virtual, w_virtual, \
                                     mass_satellite, area_satellite, length_satellite, \
                                     density, density_factor, knudsen, cdmean, stability_derivative, \
                                     rotation_rate_planet, moment, velocity_air)
         else :
-          force_aerodynamic = None
+          acceleration_aerodynamic = None
 
-        # Calculate force
+        # Calculate acceleration
         # --揚力のバンク角も各段の時刻で引く（風と同じ扱い）
         angle_bank = force_term.get_bank_angle(config, time_elapsed + fact_time_rk[m]*delta_time)
-        force = force_term.force_routine(config, r_virtual, v_virtual, \
+        acceleration = force_term.acceleration_routine(config, r_virtual, v_virtual, \
                                          mass_satellite, area_satellite, \
-                                         cdmean, density_factor, density, force, force_aerodynamic, velocity_air,
+                                         cdmean, density_factor, density, acceleration, acceleration_aerodynamic, velocity_air,
                                          angle_bank)
         #"density factor" added by Tomoki Sakai 2023/2/3
-        force_total = force[0,:]
+        acceleration_total = acceleration[0,:]
  
         # Update solution and Calculate residual
         coord_tmp, veloc_tmp, \
         r_virtual, v_virtual, \
-        r_res, v_res = solve_rungekutta(m, delta_time, mass_satellite, \
-                                        force_total, \
+        r_res, v_res = solve_rungekutta(m, delta_time, acceleration_total, \
                                         coord_tmp, veloc_tmp, \
                                         r_virtual, v_virtual, \
                                         r_virprev, v_virprev, \
@@ -406,10 +405,10 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
   return iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict
 
 
-def solve_eulerexplicit(dt, mass, force, coord_tmp, veloc_tmp, r_res, v_res):
+def solve_eulerexplicit(dt, acceleration, coord_tmp, veloc_tmp, r_res, v_res):
 
   # Update solution and Calculate residual
-  dv        = ( force )*dt
+  dv        = ( acceleration )*dt
   dr        = ( veloc_tmp )*dt
   veloc_tmp = veloc_tmp + dv
   coord_tmp = coord_tmp + dr
@@ -421,10 +420,10 @@ def solve_eulerexplicit(dt, mass, force, coord_tmp, veloc_tmp, r_res, v_res):
   return coord_tmp, veloc_tmp, r_res, v_res
 
 
-def solve_rungekutta(m, dt, mass, force, coord_tmp, veloc_tmp, r_virtual, v_virtual, r_virprev, v_virprev, r_res, v_res):
+def solve_rungekutta(m, dt, acceleration, coord_tmp, veloc_tmp, r_virtual, v_virtual, r_virprev, v_virprev, r_res, v_res):
 
   # Update solution and Calculate residual
-  kv_rk = ( force )*dt
+  kv_rk = ( acceleration )*dt
   kr_rk = ( v_virtual )*dt
 
   # Update solution
@@ -452,7 +451,7 @@ def get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aero
   # 姿勢に依存する空力（力・モーメント）を求める。
   #
   # 戻り値
-  #   force_aerodynamic: 空力による加速度（ECEF 成分, m/s2）。force_term に渡す
+  #   acceleration_aerodynamic: 空力による加速度（ECEF 成分, m/s2）。force_term に渡す
   #   moment_total     : 重心まわりのモーメントの合計（機体軸成分, N m）
   #   omega_relative   : ECEF に対する角速度（機体軸成分, rad/s）
   #
@@ -488,7 +487,7 @@ def get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aero
   # 力の符号: CFx > 0（= 迎角 0 での CD）が -x 方向（後ろ向き）の力になるようにとる。
   # これで迎角 0 では 3 自由度の抗力と一致する。
   force_aerodynamic_body = -dynamic_pressure*area_satellite*coefficient_force_body
-  force_aerodynamic      = np.dot(matrix_be.T, force_aerodynamic_body)/mass_satellite
+  acceleration_aerodynamic      = np.dot(matrix_be.T, force_aerodynamic_body)/mass_satellite
 
   omega_relative = attitude.get_omega_relative(omega_inertial, rotation_rate_planet, matrix_be)
 
@@ -497,7 +496,7 @@ def get_aerodynamic_state(config, attitude_property, aerodynamic_dict, kind_aero
                                       dynamic_pressure, area_satellite, length_satellite, velocity_mag,
                                       moment)
 
-  return force_aerodynamic, moment[0,:], omega_relative
+  return acceleration_aerodynamic, moment[0,:], omega_relative
 
 
 def solve_rungekutta_attitude(m, dt, quaternion_rate, omega_rate, quat_tmp, omega_tmp, q_virprev, w_virprev):

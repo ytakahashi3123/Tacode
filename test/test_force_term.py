@@ -22,7 +22,7 @@ import satellite.satellite as satellite
 import solver.solver as solver
 from orbital.orbital import orbital
 
-# force_routine が返す配列の行の意味
+# acceleration_routine が返す配列の行の意味
 IDX_TOTAL = 0
 IDX_GRAVITY = 1
 IDX_CORIOLIS = 2
@@ -60,13 +60,13 @@ def potential(config, coord):
 
 
 def gravity_from_code(config, coord):
-    """force_routine から重力成分だけを取り出す（空力は密度 0 で無効化）。"""
-    force = force_term.force_initialsettings(config)
-    force = force_term.force_routine(
+    """acceleration_routine から重力成分だけを取り出す（空力は密度 0 で無効化）。"""
+    acceleration = force_term.acceleration_initialsettings(config)
+    acceleration = force_term.acceleration_routine(
         config, np.array(coord, dtype=float), np.zeros(3),
         mass_satellite=1.0, area_satellite=1.0,
-        cdmean_aerodynamic=0.0, density_factor=0.0, density=0.0, force=force)
-    return np.array(force[IDX_GRAVITY, :])
+        cdmean_aerodynamic=0.0, density_factor=0.0, density=0.0, acceleration=acceleration)
+    return np.array(acceleration[IDX_GRAVITY, :])
 
 
 class TestGravityMatchesPotential(unittest.TestCase):
@@ -119,12 +119,12 @@ class TestGravityMatchesPotential(unittest.TestCase):
             r = np.linalg.norm(coord)
             expected = -gm / r ** 3 * coord
 
-            force = force_term.force_initialsettings(config)
-            force = force_term.force_routine(
-                config, coord, np.zeros(3), 1.0, 1.0, 0.0, 0.0, 0.0, force)
+            acceleration = force_term.acceleration_initialsettings(config)
+            acceleration = force_term.acceleration_routine(
+                config, coord, np.zeros(3), 1.0, 1.0, 0.0, 0.0, 0.0, acceleration)
 
             # 厳密に 0 になる成分があるので atol を併用する
-            np.testing.assert_allclose(force[IDX_GRAVITY, :], expected, rtol=1.0e-12, atol=1.0e-12)
+            np.testing.assert_allclose(acceleration[IDX_GRAVITY, :], expected, rtol=1.0e-12, atol=1.0e-12)
 
     def test_j2_makes_equatorial_pull_stronger_than_polar(self):
         """
@@ -150,11 +150,11 @@ class TestInertialAndAeroTerms(unittest.TestCase):
         velocity = np.array([1.0e3, -2.0e3, 5.0e2])
         coord = np.array([7.0e6, 0.0, 0.0])
 
-        force = force_term.force_initialsettings(self.config)
-        force = force_term.force_routine(
-            self.config, coord, velocity, 1.0, 1.0, 0.0, 0.0, 0.0, force)
+        acceleration = force_term.acceleration_initialsettings(self.config)
+        acceleration = force_term.acceleration_routine(
+            self.config, coord, velocity, 1.0, 1.0, 0.0, 0.0, 0.0, acceleration)
 
-        np.testing.assert_allclose(force[IDX_CORIOLIS, :], -2.0 * np.cross(omega, velocity),
+        np.testing.assert_allclose(acceleration[IDX_CORIOLIS, :], -2.0 * np.cross(omega, velocity),
                                    rtol=1.0e-12, atol=1.0e-15)
 
     def test_centrifugal_sign(self):
@@ -162,12 +162,12 @@ class TestInertialAndAeroTerms(unittest.TestCase):
         omega = np.array([0.0, 0.0, self.config['planet']['rotation_rate']])
         coord = np.array([4.0e6, -5.0e6, 2.0e6])
 
-        force = force_term.force_initialsettings(self.config)
-        force = force_term.force_routine(
-            self.config, coord, np.zeros(3), 1.0, 1.0, 0.0, 0.0, 0.0, force)
+        acceleration = force_term.acceleration_initialsettings(self.config)
+        acceleration = force_term.acceleration_routine(
+            self.config, coord, np.zeros(3), 1.0, 1.0, 0.0, 0.0, 0.0, acceleration)
 
         expected = -np.cross(omega, np.cross(omega, coord))
-        np.testing.assert_allclose(force[IDX_CENTRIFUGAL, :], expected, rtol=1.0e-12, atol=1.0e-15)
+        np.testing.assert_allclose(acceleration[IDX_CENTRIFUGAL, :], expected, rtol=1.0e-12, atol=1.0e-15)
 
     def test_drag_opposes_velocity(self):
         """抗力が速度と逆向きで、大きさが 1/2 rho Cd S |v|^2 / m であること。"""
@@ -175,11 +175,11 @@ class TestInertialAndAeroTerms(unittest.TestCase):
         coord = np.array([7.0e6, 0.0, 0.0])
         density, cd, area, mass, factor = 1.0e-11, 2.2, 0.5, 4.0, 1.0
 
-        force = force_term.force_initialsettings(self.config)
-        force = force_term.force_routine(
-            self.config, coord, velocity, mass, area, cd, factor, density, force)
+        acceleration = force_term.acceleration_initialsettings(self.config)
+        acceleration = force_term.acceleration_routine(
+            self.config, coord, velocity, mass, area, cd, factor, density, acceleration)
 
-        drag = np.array(force[IDX_AERO, :])
+        drag = np.array(acceleration[IDX_AERO, :])
         speed = np.linalg.norm(velocity)
 
         # 向き: 速度の逆
@@ -195,37 +195,37 @@ class TestInertialAndAeroTerms(unittest.TestCase):
         coord = np.array([7.0e6, 0.0, 0.0])
         self.assertNotIn('lift_coefficient', self.config['satellite'])
 
-        force = force_term.force_initialsettings(self.config)
-        force = force_term.force_routine(
-            self.config, coord, velocity, 4.0, 0.5, 2.2, 1.0, 1.0e-11, force)
-        aero_without = np.array(force[IDX_AERO, :])
+        acceleration = force_term.acceleration_initialsettings(self.config)
+        acceleration = force_term.acceleration_routine(
+            self.config, coord, velocity, 4.0, 0.5, 2.2, 1.0, 1.0e-11, acceleration)
+        aero_without = np.array(acceleration[IDX_AERO, :])
 
         self.config['satellite']['lift_coefficient'] = 0.0
-        force = force_term.force_initialsettings(self.config)
-        force = force_term.force_routine(
-            self.config, coord, velocity, 4.0, 0.5, 2.2, 1.0, 1.0e-11, force)
+        acceleration = force_term.acceleration_initialsettings(self.config)
+        acceleration = force_term.acceleration_routine(
+            self.config, coord, velocity, 4.0, 0.5, 2.2, 1.0, 1.0e-11, acceleration)
 
         # ビット単位で同じ（CL = 0 は足し算すら通らない）
-        np.testing.assert_array_equal(force[IDX_AERO, :], aero_without)
+        np.testing.assert_array_equal(acceleration[IDX_AERO, :], aero_without)
 
     def _aero_with_lift(self, coefficient_lift, angle_bank, velocity, coord,
                         velocity_air=None, density=1.0e-5, cd=1.2, area=12.0, mass=5000.0):
         config = copy.deepcopy(self.config)
         config['satellite']['lift_coefficient'] = coefficient_lift
         config['satellite']['bank_angle'] = angle_bank
-        force = force_term.force_initialsettings(config)
-        force = force_term.force_routine(
-            config, coord, velocity, mass, area, cd, 1.0, density, force,
+        acceleration = force_term.acceleration_initialsettings(config)
+        acceleration = force_term.acceleration_routine(
+            config, coord, velocity, mass, area, cd, 1.0, density, acceleration,
             velocity_air=velocity_air)
-        aero = np.array(force[IDX_AERO, :])
+        aero = np.array(acceleration[IDX_AERO, :])
 
         # 抗力だけの分を引くと揚力が残る
         config['satellite']['lift_coefficient'] = 0.0
-        force = force_term.force_initialsettings(config)
-        force = force_term.force_routine(
-            config, coord, velocity, mass, area, cd, 1.0, density, force,
+        acceleration = force_term.acceleration_initialsettings(config)
+        acceleration = force_term.acceleration_routine(
+            config, coord, velocity, mass, area, cd, 1.0, density, acceleration,
             velocity_air=velocity_air)
-        return aero - np.array(force[IDX_AERO, :]), (density, area, mass)
+        return aero - np.array(acceleration[IDX_AERO, :]), (density, area, mass)
 
     def test_lift_is_perpendicular_to_the_velocity_and_has_the_right_magnitude(self):
         velocity = np.array([7.0e3, 1.0e3, -5.0e2])
@@ -279,11 +279,11 @@ class TestInertialAndAeroTerms(unittest.TestCase):
         config = copy.deepcopy(self.config)
         config['satellite']['lift_coefficient'] = 0.4
         given = np.array([1.0, -2.0, 3.0])
-        force = force_term.force_initialsettings(config)
-        force = force_term.force_routine(
+        acceleration = force_term.acceleration_initialsettings(config)
+        acceleration = force_term.acceleration_routine(
             config, np.array([6.5e6, 1.0e6, 2.0e6]), np.array([7.0e3, 1.0e3, -5.0e2]),
-            5000.0, 12.0, 1.2, 1.0, 1.0e-5, force, force_aerodynamic=given)
-        np.testing.assert_array_equal(force[IDX_AERO, :], given)
+            5000.0, 12.0, 1.2, 1.0, 1.0e-5, acceleration, acceleration_aerodynamic=given)
+        np.testing.assert_array_equal(acceleration[IDX_AERO, :], given)
 
     def test_the_bank_angle_table_is_interpolated_and_clamped(self):
         """satellite.bank_angle_table は時刻について線形内挿し、両端の外は端の値。"""
@@ -327,29 +327,29 @@ class TestInertialAndAeroTerms(unittest.TestCase):
         def aero(angle_bank, coefficient_lift=0.4):
             config_tmp = copy.deepcopy(config)
             config_tmp['satellite']['lift_coefficient'] = coefficient_lift
-            force = force_term.force_initialsettings(config_tmp)
-            force = force_term.force_routine(
-                config_tmp, coord, velocity, 5000.0, 12.0, 1.2, 1.0, 1.0e-5, force,
+            acceleration = force_term.acceleration_initialsettings(config_tmp)
+            acceleration = force_term.acceleration_routine(
+                config_tmp, coord, velocity, 5000.0, 12.0, 1.2, 1.0, 1.0e-5, acceleration,
                 angle_bank=angle_bank)
-            return np.array(force[IDX_AERO, :])
+            return np.array(acceleration[IDX_AERO, :])
 
         drag = aero(0.0, coefficient_lift=0.0)
         # 引数 180 deg は 0 deg とは逆向きの揚力になる
         np.testing.assert_allclose(aero(180.0) - drag, -(aero(0.0) - drag), rtol=1.0e-12)
         # 引数を与えなければ config の値（0 deg）が使われる
-        force = force_term.force_initialsettings(config)
-        force = force_term.force_routine(
-            config, coord, velocity, 5000.0, 12.0, 1.2, 1.0, 1.0e-5, force)
-        np.testing.assert_allclose(np.array(force[IDX_AERO, :]), aero(0.0), rtol=1.0e-14)
+        acceleration = force_term.acceleration_initialsettings(config)
+        acceleration = force_term.acceleration_routine(
+            config, coord, velocity, 5000.0, 12.0, 1.2, 1.0, 1.0e-5, acceleration)
+        np.testing.assert_allclose(np.array(acceleration[IDX_AERO, :]), aero(0.0), rtol=1.0e-14)
 
     def test_total_is_the_sum_of_the_parts(self):
-        force = force_term.force_initialsettings(self.config)
-        force = force_term.force_routine(
+        acceleration = force_term.acceleration_initialsettings(self.config)
+        acceleration = force_term.acceleration_routine(
             self.config, np.array([5.0e6, 3.0e6, 2.0e6]), np.array([1.0e3, 2.0e3, 3.0e3]),
-            4.0, 0.5, 2.2, 1.0, 1.0e-11, force)
+            4.0, 0.5, 2.2, 1.0, 1.0e-11, acceleration)
 
-        expected = force[IDX_GRAVITY] + force[IDX_CORIOLIS] + force[IDX_CENTRIFUGAL] + force[IDX_AERO]
-        np.testing.assert_allclose(force[IDX_TOTAL, :], expected, rtol=1.0e-14)
+        expected = acceleration[IDX_GRAVITY] + acceleration[IDX_CORIOLIS] + acceleration[IDX_CENTRIFUGAL] + acceleration[IDX_AERO]
+        np.testing.assert_allclose(acceleration[IDX_TOTAL, :], expected, rtol=1.0e-14)
 
 
 class TestTheLiftThroughTheSolver(unittest.TestCase):

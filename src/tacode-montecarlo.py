@@ -10,17 +10,22 @@ from montecarlo.montecarlo import montecarlo
 
 def main():
 
+  # orbital と montecarlo はクラス。インスタンスは局所に持つ（クラス名を
+  # 潰すと、クラス属性として参照している側と読み分けが要る）
+  orb = orbital()
+  mc  = montecarlo()
+
   # 設定ファイルの読み込み
-  file_control_default = orbital.file_control_default
-  arg                  = orbital.argument(file_control_default)
+  file_control_default = orb.file_control_default
+  arg                  = orb.argument(file_control_default)
   file_control         = arg.file
-  config               = orbital.read_config_yaml(file_control)
+  config               = orb.read_config_yaml(file_control)
 
   # Initial setting
-  montecarlo.initial_settings(config)
+  mc.initial_settings(config)
 
   # Monte-Carlo simulation
-  montecarlo.montecarlo_routine(config)
+  mc.montecarlo_routine(config)
 
   return
 
@@ -28,11 +33,6 @@ def main():
 if __name__ == '__main__':
 
   print('Initializing Tacode-MonteCarlo')
-
-  # Call classes
-  orbital = orbital()
-
-  montecarlo = montecarlo()
 
   # Main
   main()

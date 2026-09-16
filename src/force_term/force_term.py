@@ -2,6 +2,19 @@
 
 # Author: Y.Takahashi, Hokkaido University
 # Date: 2022/05/23
+#
+# 運動方程式の各項。ディレクトリ名は force_term だが、**積んでいるのは質量で割った
+# 加速度 [m/s2]** で、力 [N] ではない（重力・コリオリ・遠心力はもともと加速度、
+# 空力だけ mass_satellite で割ってある）。項ごとに配列へ積んでから合計する。
+#
+#   acceleration[0,:] : 合計
+#   acceleration[1,:] : 重力（J2/J22/J3/J4 まで）
+#   acceleration[2,:] : コリオリ
+#   acceleration[3,:] : 遠心
+#   acceleration[4,:] : 空力（抗力＋揚力、6 自由度では姿勢から決まる加速度）
+#
+# いずれも ECEF 成分。モーメント側（moment_term.py）は角加速度ではなく
+# モーメントそのものなので、対比に注意。
 
 import sys as sys
 import numpy as np
@@ -64,14 +77,14 @@ def get_lift_direction(coordinate, velocity_aero, angle_bank):
   return np.cos(angle_bank)*component_up + np.sin(angle_bank)*component_right
 
 
-def force_initialsettings(config):
+def acceleration_initialsettings(config):
 
-  force = np.zeros(5*3).reshape(5,3)
+  acceleration = np.zeros(5*3).reshape(5,3)
 
-  return force
+  return acceleration
 
 
-def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, cdmean_aerodynamic, density_factor, density, force, force_aerodynamic=None, velocity_air=None, angle_bank=None):
+def acceleration_routine(config, coordinate, velocity, mass_satellite, area_satellite, cdmean_aerodynamic, density_factor, density, acceleration, acceleration_aerodynamic=None, velocity_air=None, angle_bank=None):
   
   potential_factor     = config['planet']['potential_factor']
   radius_equat_planet  = config['planet']['radius']
@@ -80,7 +93,7 @@ def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, 
   rotation_rate_planet = config['planet']['rotation_rate']
 
 
-  # Gravitational force
+  # Gravitational acceleration
   radius_pmass    = np.sqrt( coordinate[0]**2 + coordinate[1]**2 + coordinate[2]**2 )
   radius_by_coord = radius_equat_planet/radius_pmass                   # a_e/r
   gme_by_radius2  = gravity_const_planet*mass_planet/(radius_pmass**2) # G*M_e/r2
@@ -101,50 +114,50 @@ def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, 
   sin_2labd_labd22 = np.sin( 2.0*(angle_long + labd22 ) )
   cos_2labd_labd22 = np.cos( 2.0*(angle_long + labd22 ) )
 
-  force_g_r = gme_by_radius2 * (- 1.0                                                                           \
-                                + 1.5    *radius_by_coord**2*J2  *( 3.0*sin_beta**2 -  1.0 )                    \
-                                + 9.0    *radius_by_coord**2*J22 *(     cos_beta**2         )*cos_2labd_labd22  \
-                                + 2.0    *radius_by_coord**3*J3  *( 5.0*sin_beta**3 -  3.0*sin_beta )           \
-                                + 5.0/8.0*radius_by_coord**4*J4  *(35.0*sin_beta**4 - 30.0*sin_beta**2 + 3.0 )  \
-                                )
-  force_g_a = gme_by_radius2 * (  6.0    *radius_by_coord**2*J22 *(     cos_beta            )*sin_2labd_labd22 )
-  force_g_b = gme_by_radius2 * (                                                                                \
-                                - 1.0    *radius_by_coord**2*J2  *( 3.0*sin_beta*cos_beta  )                    \
-                                + 6.0    *radius_by_coord**2*J22 *(     sin_beta*cos_beta  )*cos_2labd_labd22   \
-                                - 0.5    *radius_by_coord**3*J3  *(15.0*sin_beta**2 -  3.0 )*cos_beta           \
-                                - 0.5    *radius_by_coord**4*J4  *(35.0*sin_beta**3 - 15.0*sin_beta )*cos_beta  \
-                               ) 
+  acceleration_g_r = gme_by_radius2 * (- 1.0                                                                           \
+                                       + 1.5    *radius_by_coord**2*J2  *( 3.0*sin_beta**2 -  1.0 )                    \
+                                       + 9.0    *radius_by_coord**2*J22 *(     cos_beta**2         )*cos_2labd_labd22  \
+                                       + 2.0    *radius_by_coord**3*J3  *( 5.0*sin_beta**3 -  3.0*sin_beta )           \
+                                       + 5.0/8.0*radius_by_coord**4*J4  *(35.0*sin_beta**4 - 30.0*sin_beta**2 + 3.0 )  \
+                                       )
+  acceleration_g_a = gme_by_radius2 * (  6.0    *radius_by_coord**2*J22 *(     cos_beta            )*sin_2labd_labd22 )
+  acceleration_g_b = gme_by_radius2 * (                                                                                \
+                                       - 1.0    *radius_by_coord**2*J2  *( 3.0*sin_beta*cos_beta  )                    \
+                                       + 6.0    *radius_by_coord**2*J22 *(     sin_beta*cos_beta  )*cos_2labd_labd22   \
+                                       - 0.5    *radius_by_coord**3*J3  *(15.0*sin_beta**2 -  3.0 )*cos_beta           \
+                                       - 0.5    *radius_by_coord**4*J4  *(35.0*sin_beta**3 - 15.0*sin_beta )*cos_beta  \
+                                      ) 
 
-  force[1,0] =  ( force_g_r*cos_beta - force_g_b*sin_beta )*cos_labd - force_g_a*sin_labd
-  force[1,1] =  ( force_g_r*cos_beta - force_g_b*sin_beta )*sin_labd + force_g_a*cos_labd
-  force[1,2] =    force_g_r*sin_beta + force_g_b*cos_beta
+  acceleration[1,0] =  ( acceleration_g_r*cos_beta - acceleration_g_b*sin_beta )*cos_labd - acceleration_g_a*sin_labd
+  acceleration[1,1] =  ( acceleration_g_r*cos_beta - acceleration_g_b*sin_beta )*sin_labd + acceleration_g_a*cos_labd
+  acceleration[1,2] =    acceleration_g_r*sin_beta + acceleration_g_b*cos_beta
 
 
   # Coriolis
-  force[2,0]  = 2.0*rotation_rate_planet*velocity[1]
-  force[2,1]  =-2.0*rotation_rate_planet*velocity[0]
-  force[2,2]  = 0.0
+  acceleration[2,0]  = 2.0*rotation_rate_planet*velocity[1]
+  acceleration[2,1]  =-2.0*rotation_rate_planet*velocity[0]
+  acceleration[2,2]  = 0.0
 
 
   # Centrifugal
-  force[3,0] = rotation_rate_planet**2*coordinate[0]
-  force[3,1] = rotation_rate_planet**2*coordinate[1]
-  force[3,2] = 0.0
+  acceleration[3,0] = rotation_rate_planet**2*coordinate[0]
+  acceleration[3,1] = rotation_rate_planet**2*coordinate[1]
+  acceleration[3,2] = 0.0
 
 
   # Aerodynamic (Fx = 1/2 rho U^2 * Ux/U)
   # --6 自由度計算では姿勢に応じた空力加速度（ECEF 成分）が呼び出し側で求まっているので、
   #   それを与える。3 自由度では従来どおり速度方向の抗力のみ。
-  if force_aerodynamic is None :
+  if acceleration_aerodynamic is None :
     # 風があるときは対気速度で抗力を作る。上の重力・コリオリ力・遠心力は ECEF 速度のまま
     # （velocity_air が None なら velocity をそのまま使うので、風を切れば従来とビット単位で同じ）
     velocity_aero  = velocity if velocity_air is None else velocity_air
     velocity_mag   = np.sqrt(velocity_aero[0]**2+velocity_aero[1]**2+velocity_aero[2]**2)
     fact_aero      = 0.50*density_factor*density*velocity_mag*area_satellite*cdmean_aerodynamic/mass_satellite
     #"density factor" added by Tomoki Sakai 2023/2/3
-    force[4,0] = -fact_aero * velocity_aero[0]
-    force[4,1] = -fact_aero * velocity_aero[1]
-    force[4,2] = -fact_aero * velocity_aero[2]
+    acceleration[4,0] = -fact_aero * velocity_aero[0]
+    acceleration[4,1] = -fact_aero * velocity_aero[1]
+    acceleration[4,2] = -fact_aero * velocity_aero[2]
 
     # 揚力。**既定は satellite.lift_coefficient = 0 で、そのときここは一切通らない**
     # （＝揚力を入れなければ従来の出力とビット単位で同じ）。
@@ -156,20 +169,20 @@ def force_routine(config, coordinate, velocity, mass_satellite, area_satellite, 
       angle_tmp  = get_bank_angle(config, 0.0) if angle_bank is None else angle_bank
       fact_lift  = 0.50*density_factor*density*velocity_mag**2*area_satellite*coefficient_lift/mass_satellite
       direction_lift = get_lift_direction(coordinate, velocity_aero, angle_tmp*orbital.deg2rad)
-      force[4,0] = force[4,0] + fact_lift*direction_lift[0]
-      force[4,1] = force[4,1] + fact_lift*direction_lift[1]
-      force[4,2] = force[4,2] + fact_lift*direction_lift[2]
+      acceleration[4,0] = acceleration[4,0] + fact_lift*direction_lift[0]
+      acceleration[4,1] = acceleration[4,1] + fact_lift*direction_lift[1]
+      acceleration[4,2] = acceleration[4,2] + fact_lift*direction_lift[2]
   else :
-    force[4,0] = force_aerodynamic[0]
-    force[4,1] = force_aerodynamic[1]
-    force[4,2] = force_aerodynamic[2]
+    acceleration[4,0] = acceleration_aerodynamic[0]
+    acceleration[4,1] = acceleration_aerodynamic[1]
+    acceleration[4,2] = acceleration_aerodynamic[2]
 
 
-  #print(force[1,:],force[2,:],force[3,:])
+  #print(acceleration[1,:],acceleration[2,:],acceleration[3,:])
 
   # Total
-  force[0,:] = force[1,:] + force[2,:] + force[3,:] + force[4,:]
+  acceleration[0,:] = acceleration[1,:] + acceleration[2,:] + acceleration[3,:] + acceleration[4,:]
 
 
-  return force
+  return acceleration
 

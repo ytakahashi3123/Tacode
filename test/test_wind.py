@@ -439,37 +439,37 @@ class TestTheWindEntersOnlyTheAerodynamics(unittest.TestCase):
         self.velocity_air = wind.get_relative_velocity(self.config, self.coordinate, [0.0, 0.0, 0.0],
                                                        self.velocity, self.wind_dict)
 
-    def force(self, velocity, velocity_air=None):
-        force = force_term.force_initialsettings(self.config)
-        return np.array(force_term.force_routine(self.config, self.coordinate, velocity,
-                                                 10.0, 0.785, 1.3, 1.0, 1.e-5,
-                                                 force, None, velocity_air))
+    def acceleration(self, velocity, velocity_air=None):
+        acceleration = force_term.acceleration_initialsettings(self.config)
+        return np.array(force_term.acceleration_routine(self.config, self.coordinate, velocity,
+                                                        10.0, 0.785, 1.3, 1.0, 1.e-5,
+                                                        acceleration, None, velocity_air))
 
     def test_the_drag_with_wind_equals_the_drag_at_the_relative_velocity(self):
-        with_wind = self.force(self.velocity, self.velocity_air)
-        without = self.force(self.velocity_air)
+        with_wind = self.acceleration(self.velocity, self.velocity_air)
+        without = self.acceleration(self.velocity_air)
         np.testing.assert_allclose(with_wind[4], without[4], rtol=0.0, atol=0.0)
 
     def test_gravity_and_the_rotation_terms_do_not_see_the_wind(self):
-        with_wind = self.force(self.velocity, self.velocity_air)
-        without = self.force(self.velocity)
+        with_wind = self.acceleration(self.velocity, self.velocity_air)
+        without = self.acceleration(self.velocity)
         for row, name in ((1, 'gravity'), (2, 'Coriolis'), (3, 'centrifugal')):
             np.testing.assert_allclose(with_wind[row], without[row], rtol=0.0, atol=0.0,
                                        err_msg=name)
 
     def test_the_coriolis_term_keeps_using_the_ground_velocity(self):
         # コリオリ力に対気速度を使ってしまう取り違えを捕まえる
-        with_wind = self.force(self.velocity, self.velocity_air)
-        wrong = self.force(self.velocity_air)
+        with_wind = self.acceleration(self.velocity, self.velocity_air)
+        wrong = self.acceleration(self.velocity_air)
         self.assertFalse(np.allclose(with_wind[2], wrong[2]))
 
     def test_the_drag_opposes_the_relative_velocity(self):
-        with_wind = self.force(self.velocity, self.velocity_air)
+        with_wind = self.acceleration(self.velocity, self.velocity_air)
         direction = with_wind[4]/np.linalg.norm(with_wind[4])
         np.testing.assert_allclose(direction, -self.velocity_air/np.linalg.norm(self.velocity_air), atol=1.e-12)
 
     def test_the_total_is_still_the_sum_of_the_terms(self):
-        with_wind = self.force(self.velocity, self.velocity_air)
+        with_wind = self.acceleration(self.velocity, self.velocity_air)
         np.testing.assert_allclose(with_wind[0], with_wind[1:5].sum(axis=0), rtol=1.e-14, atol=0.0)
 
 

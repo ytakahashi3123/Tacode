@@ -21,11 +21,15 @@ import output_gpsdata.output_gpsdata as output_gpsdata
 
 def main():
 
+  # orbital はクラス。インスタンスは局所に持つ（モジュール名としてのクラスを
+  # 潰すと、solver.py のようにクラス属性として参照している側と読み分けが要る）
+  orb = orbital()
+
   # 設定ファイルの読み込み
-  file_control_default = orbital.file_control_default
-  arg                  = orbital.argument(file_control_default)
+  file_control_default = orb.file_control_default
+  arg                  = orb.argument(file_control_default)
   file_control         = arg.file
-  config               = orbital.read_config_yaml(file_control)
+  config               = orb.read_config_yaml(file_control)
 
   # Set the epoch (absolute time)
   # --None が返れば従来どおり経過秒だけで、出力にも時刻は載らない
@@ -42,18 +46,18 @@ def main():
   wind_dict = wind.initial_settings_wind(config, epoch_dict)
 
   # Make directories for output data
-  orbital.make_directory_output(config)
+  orb.make_directory_output(config)
 
   # Initial setting
   # --epoch_dict はリスタートのときだけ使う（ファイルのエポックとの食い違いを見る）
-  iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = orbital.initial_settings(config, epoch_dict)
+  iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict = orb.initial_settings(config, epoch_dict)
 
   # 出力の時刻列の起点。リスタートでは 0 ではなく、再開時刻から続ける
   time_elapsed_initial = time_elapsed
 
   # Initial setting of the attitude
   # --None が返れば従来どおりの質点 3 自由度計算
-  attitude_dict = orbital.initial_settings_attitude(config, coordinate_dict, velocity_dict)
+  attitude_dict = orb.initial_settings_attitude(config, coordinate_dict, velocity_dict)
 
   # Main routine
   # --attitude_dict は他の辞書と同じくソルバー内で更新される
@@ -63,10 +67,10 @@ def main():
   output_gpsdata.output_routine(config, iteration, coordinate_dict, velocity_dict, time_elapsed_initial)
 
   # Output : Tecplot
-  orbital.output_tecplot(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict, epoch_dict, wind_dict, time_elapsed_initial)
+  orb.output_tecplot(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict, epoch_dict, wind_dict, time_elapsed_initial)
 
   # Output restart
-  orbital.output_restart(config, iteration, time_elapsed, coordinate_dict['cartesian'], velocity_dict['cartesian'], attitude_dict, epoch_dict)
+  orb.output_restart(config, iteration, time_elapsed, coordinate_dict['cartesian'], velocity_dict['cartesian'], attitude_dict, epoch_dict)
 
   return
 
@@ -74,9 +78,6 @@ def main():
 if __name__ == '__main__':
 
   print('Initializing Tacode')
-
-  # Calling classes
-  orbital  = orbital()
 
   # main 
   main()
