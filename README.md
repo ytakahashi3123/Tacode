@@ -853,7 +853,7 @@ request:
 
 | Job | What it does |
 |---|---|
-| `unit` | The test suite on Python 3.9, 3.10, 3.11, 3.12 and 3.13 |
+| `unit` | The test suite on Python 3.9, 3.10, 3.11, 3.12 and 3.13. Only the 3.12 run installs matplotlib, so that the drawing tests of `src_helper/` are exercised somewhere while the other versions confirm that they are skipped without it |
 | `tutorial` | The tutorial case end to end, through `run_tacode.sh`, and a check that a bad configuration exits with a non-zero code |
 | `setup-script` | `setup_env.sh` on a machine without the packages, then the suite using the `.venv` it built |
 

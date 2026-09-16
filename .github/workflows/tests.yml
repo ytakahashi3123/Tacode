@@ -37,6 +37,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
+      # matplotlib は任意依存なので、無ければ src_helper/ の絵を書くテストは
+      # skip される。どこでも動かさないままにならないよう、1 つの版でだけ入れる
+      - name: Install the optional drawing dependency (one version only)
+        if: matrix.python-version == '3.12'
+        run: python -m pip install matplotlib
+
       - name: Show the versions actually installed
         run: python -c "import numpy, scipy, yaml, simplekml; print('numpy', numpy.__version__); print('scipy', scipy.__version__); print('PyYAML', yaml.__version__); print('simplekml', simplekml.__version__)"
 
