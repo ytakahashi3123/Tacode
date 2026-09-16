@@ -801,6 +801,27 @@ Trajectory simulation by `Tacode` is controled by the configuration file: `confi
 `tutorial/template/config.yml` carries every setting with a comment on what it does,
 including the `attitude` section, which is present but switched off there.
 
+## Conventions in the source
+
+**Comments in new code are written in Japanese.** The older layers of `src/` carry
+English comments and are left as they are; the modules added since — `attitude/`,
+`wind/`, `epoch/`, `montecarlo/`, `src_helper/` and the tests — are in Japanese, and
+anything written from now on follows them. What matters is that a comment says *why* a
+line is the way it is, in whichever of the two languages the surrounding file uses, so a
+file is not half and half.
+
+**Commit messages, identifiers and printed output stay in English**, since they are read
+by `git`, by the tests and by anyone running the code without a Japanese terminal.
+
+Two more conventions are worth knowing before changing anything:
+
+- **An error path ends in `sys.exit(1)`**, never a bare `exit()`, which returns 0 and
+  hides the failure from the shell, from the Monte-Carlo driver and from CI.
+  `test/test_error_exit.py` keeps them out of `src/`.
+- **A change which is not meant to alter the result has to prove it**: the outputs of the
+  tutorial and validation cases must come out identical byte for byte. That is the
+  acceptance condition used for every refactoring listed in the history.
+
 ## Tests
 
 ```console
