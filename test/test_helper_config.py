@@ -113,6 +113,19 @@ class TestTheOrderOfPrecedence(unittest.TestCase):
             self.assertEqual(argument.frames, 5)
             self.assertEqual(argument.directory, 'work_cli')
 
+    def test_the_command_line_wins_even_with_the_default_value(self):
+        #
+        # 既定値と同じ値をコマンドラインで明示したときも、設定ファイルではなく
+        # コマンドラインが勝つこと。「既定値と違うかどうか」で判定していた頃は、
+        # --frames 180 と書いても設定ファイルの 30 になっていた。
+        #
+        with tempfile.TemporaryDirectory() as directory:
+            argument = get_setting(['--frames', '180', '--view', 'flat'],
+                                   {SECTION: {'frames': 30, 'view': '3d'}},
+                                   directory)
+            self.assertEqual(argument.frames, 180)
+            self.assertEqual(argument.view, 'flat')
+
     def test_another_section_is_ignored(self):
         with tempfile.TemporaryDirectory() as directory:
             argument = get_setting([], {'another_tool': {'frames': 30},

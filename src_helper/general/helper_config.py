@@ -76,19 +76,41 @@ def read_file(filename):
   return content
 
 
+def get_given(parser):
+  #
+  # コマンドラインで**実際に与えられた**ものだけを返す。
+  #
+  # 既定値を一時的に argparse.SUPPRESS にして同じ引数を読み直すと、与えられなかった
+  # 項目は属性そのものが現れない。既定値との比較では「既定値と同じ値を明示した」
+  # 場合を拾えないので、こちらで判定する。parser は呼び出し元のものなので、
+  # 既定値は必ず戻す。
+  #
+  default_list = [action.default for action in parser._actions]
+  try:
+    for action in parser._actions:
+      action.default = argparse.SUPPRESS
+    given = vars(parser.parse_args())
+  finally:
+    for action, value in zip(parser._actions, default_list):
+      action.default = value
+
+  return given
+
+
 def get_setting(parser, section):
   #
   # コマンドライン・設定ファイル・既定値をこの順の優先度でまとめ、
   # argparse.Namespace にして返す。
   #
-  # 「コマンドラインで与えられたか」は既定値と違うかどうかで判定する。
-  # 既定値と同じ値を明示しても設定ファイルに負けるだけなので実害はない。
+  # 「コマンドラインで与えられたか」は、既定値を伏せた読み直しで判定する
+  # （get_given）。既定値と同じ値を明示したときも、設定ファイルではなく
+  # コマンドラインが勝つ。
   #
   argument = parser.parse_args()
   default  = vars(parser.parse_args([]))
 
-  given = {key: value for key, value in vars(argument).items()
-           if key not in KEY_INTERNAL and value != default.get(key)}
+  given = {key: value for key, value in get_given(parser).items()
+           if key not in KEY_INTERNAL}
 
   content = read_file(argument.file)
   setting = content.get(section, {})

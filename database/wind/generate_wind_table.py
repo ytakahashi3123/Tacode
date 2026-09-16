@@ -74,6 +74,7 @@ import urllib.request
 DIRECTORY_SRC = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..', 'src')
 sys.path.insert(0, os.path.normpath(DIRECTORY_SRC))
 import wind.wind as wind_module
+import epoch.epoch as epoch_module
 
 # NOAA PSL の OPeNDAP。年ごとに 1 ファイル、6 時間毎・2.5 度格子・17 気圧面
 URL_NCEP_BASE = 'https://psl.noaa.gov/thredds/dodsC/Datasets/ncep.reanalysis/pressure'
@@ -89,13 +90,12 @@ TIMEOUT_REQUEST = 60
 
 
 def parse_datetime(string_datetime):
-  string_tmp = string_datetime.strip()
-  if string_tmp.endswith('Z') or string_tmp.endswith('z') :
-    string_tmp = string_tmp[:-1] + '+00:00'
-  time_tmp = datetime.datetime.fromisoformat(string_tmp)
-  if time_tmp.tzinfo is None :
-    time_tmp = time_tmp.replace(tzinfo=datetime.timezone.utc)
-  return time_tmp.astimezone(datetime.timezone.utc)
+  #
+  # 時刻の解釈はソルバー側と同じものを使う（テーブルの読み取りに src/wind/wind.py を
+  # 使っているのと同じ方針。規約を二重に持たない）。書式が不正なら epoch 側が
+  # 説明を出して終了コード 1 で止まる。
+  #
+  return epoch_module.parse_datetime(string_datetime)
 
 
 def fetch_opendap(url):
