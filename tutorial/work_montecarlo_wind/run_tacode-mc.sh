@@ -23,4 +23,4 @@ LOG=log_tacode_montecarlo
 export OMP_NUM_THREADS=1
 
 #$PYTHON_RUN $LD > $LOG
-$PYTHON_RUN  $LD 2>&1 | tee $LOG
+$PYTHON_RUN  $LD "$@" 2>&1 | tee $LOG

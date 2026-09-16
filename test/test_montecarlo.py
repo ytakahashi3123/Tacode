@@ -57,6 +57,11 @@ CONFIG_MONTECARLO_WIND = os.path.join(ROOT_DIR, 'tutorial', 'work_montecarlo_win
 TEMPLATE_WIND = os.path.join(ROOT_DIR, 'tutorial', 'template_wind')
 CONFIG_TEMPLATE_WIND = os.path.join(TEMPLATE_WIND, 'config.yml')
 
+CONFIG_MONTECARLO_WIND_TABLE = os.path.join(ROOT_DIR, 'tutorial', 'work_montecarlo_wind',
+                                            'config_table.yml')
+TEMPLATE_WIND_TABLE = os.path.join(ROOT_DIR, 'tutorial', 'template_wind_table')
+CONFIG_TEMPLATE_WIND_TABLE = os.path.join(TEMPLATE_WIND_TABLE, 'config.yml')
+
 
 def rewrite(text, key, values, section=None):
     """制御ファイルの断片を書き換え、書き換え後のテキストを返す。"""
@@ -352,6 +357,74 @@ class TestFindingTheCaseDirectories(unittest.TestCase):
             case_list = [os.path.basename(path)
                          for path in montecarlo_dispersion.find_case_directory(directory)]
             self.assertEqual(case_list, ['case0001', 'case0002'])
+
+
+class TestTheWindTableMonteCarloTutorial(unittest.TestCase):
+    """
+    config_table.yml + template_wind_table。実データの風の場を velocity_factor で振る。
+
+    テーブルはファイル名で選ぶので、driver が動かせる数字は場の強さだけ。測っているのは
+    「既知として扱う場の強さの不確かさ」で、場そのものの誤差ではない（README の
+    Scattering the wind / A real wind field）。
+    """
+
+    def test_the_template_reads_the_table(self):
+        template = load_config(CONFIG_TEMPLATE_WIND_TABLE)
+        self.assertTrue(template['wind']['flag_wind'])
+        self.assertEqual(template['wind']['kind_wind_model'], 'fileread')
+        self.assertEqual(template['wind']['directory_path_specify'], 'manual')
+        # テーブルはテンプレート自身が持っていること（複製されて走るので）
+        self.assertTrue(os.path.exists(os.path.join(template['wind']['directory_wind'],
+                                                    template['wind']['filename_wind'])))
+
+    def test_the_table_is_the_one_the_single_run_uses(self):
+        # work_reentry_wind_table と同じ場でないと、比較する意味が無い
+        template = load_config(CONFIG_TEMPLATE_WIND_TABLE)
+        single = load_config(os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_wind_table',
+                                          'config.yml'))
+        self.assertEqual(template['wind']['filename_wind'], single['wind']['filename_wind'])
+        self.assertEqual(template['wind']['kind_extrapolation'],
+                         single['wind']['kind_extrapolation'])
+
+    def test_the_template_and_the_case_agree(self):
+        config = load_config(CONFIG_MONTECARLO_WIND_TABLE)
+        template = load_config(CONFIG_TEMPLATE_WIND_TABLE)
+
+        self.assertEqual(config['wind']['kind_wind_model'], template['wind']['kind_wind_model'])
+        self.assertEqual(config['wind']['filename_wind'], template['wind']['filename_wind'])
+        self.assertEqual(config['wind']['velocity_factor'], template['wind']['velocity_factor'])
+        self.assertEqual(config['initial_settings']['velocity'],
+                         template['initial_settings']['velocity'])
+        self.assertEqual(config['initial_settings']['coordinate'],
+                         template['initial_settings']['coordinate'])
+
+    def test_the_template_path_points_at_the_table_template(self):
+        config = load_config(CONFIG_MONTECARLO_WIND_TABLE)
+        self.assertEqual(config['montecarlo']['template_path_specify'], 'manual')
+        path = os.path.normpath(os.path.join(os.path.dirname(CONFIG_MONTECARLO_WIND_TABLE),
+                                             config['montecarlo']['template_path']))
+        self.assertEqual(path, os.path.normpath(TEMPLATE_WIND_TABLE))
+
+    def test_the_scattered_variable_is_the_strength_of_the_field(self):
+        config = load_config(CONFIG_MONTECARLO_WIND_TABLE)
+        target = config['montecarlo']['target_variable']
+        self.assertEqual(len(target), 1)
+        name, section, dispersion = target[0]
+        self.assertEqual((name, section), ('velocity_factor', 'wind'))
+        self.assertGreater(dispersion, 0.0)
+
+        # テンプレート側の同じ行が書き換わること
+        with open(CONFIG_TEMPLATE_WIND_TABLE) as f:
+            text_template = f.read()
+        rewritten = yaml.safe_load(rewrite(text_template, name, ['0.5'], section))
+        self.assertEqual(rewritten[section][name], [0.5])
+
+    def test_it_does_not_share_its_directories_with_the_constant_wind_case(self):
+        # 同じディレクトリで走るので、work_dir と result_dir がぶつかると上書きになる
+        config = load_config(CONFIG_MONTECARLO_WIND_TABLE)
+        other = load_config(CONFIG_MONTECARLO_WIND)
+        self.assertNotEqual(config['montecarlo']['work_dir'], other['montecarlo']['work_dir'])
+        self.assertNotEqual(config['montecarlo']['result_dir'], other['montecarlo']['result_dir'])
 
 
 class TestTheNumberOfCasesAtOnce(unittest.TestCase):

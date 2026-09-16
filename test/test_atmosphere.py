@@ -999,7 +999,8 @@ class TestTheReferenceLengthOfTheAerodynamicTable(unittest.TestCase):
         新しいケースを足したときに黙って仲間が増えないよう、ここで並びを固定する。
         減らす（ケースを直す）ときは出力が動くので、参照出力の更新とセットになる。
         """
-        expected = {'tutorial/template_wind', 'tutorial/work_montecarlo_wind',
+        expected = {'tutorial/template_wind', 'tutorial/template_wind_table',
+                    'tutorial/work_montecarlo_wind',
                     'tutorial/work_reentry', 'tutorial/work_reentry_wind_table'}
 
         different = set()

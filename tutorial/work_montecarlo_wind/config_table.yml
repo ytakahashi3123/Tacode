@@ -120,7 +120,7 @@ wind:
   # Wind model
   # --constant: one uniform wind everywhere
   # --fileread: interpolate a table of longitude x latitude x altitude
-  kind_wind_model: constant
+  kind_wind_model: fileread
 
   # Wind model: constant settings
   # --[East, North, Up] in the local geocentric horizon, m/s. This is the frame the
@@ -141,7 +141,7 @@ wind:
   # --Path resolution is the same as satellite.directory_path_specify
   directory_path_specify: manual # default or manual
   directory_wind: database/wind
-  filename_wind: windmodel.txt
+  filename_wind: wind_merged_20240101_pacific.txt
 
   # Treatment outside the altitude range of the table
   # --zero (default): no wind there, that is, the atmosphere co-rotates with the Earth
@@ -231,8 +231,19 @@ post_process:
 
 # Monte-Carlo process
 montecarlo:
+  # Monte-Carlo over a REAL wind field (tutorial/template_wind_table).
+  #
+  # A table is chosen by its file name, so the one number the driver can vary is
+  # wind.velocity_factor, the strength of the whole field. What this measures is
+  # therefore the uncertainty in the strength of a field taken as known -- not the
+  # error of the field itself, and not an envelope around the wind that actually
+  # blew. config.yml next to this file scatters a CONSTANT wind instead, which
+  # measures the sensitivity to the wind; the two answer different questions.
+  #
+  #   ./run_tacode-mc.sh -file config_table.yml
+  #
   # TAcode case directory
-  work_dir: work_montecarlo_wind
+  work_dir: work_montecarlo_wind_table
   case_dir: case
 
   # Template path for Tacode work directory
@@ -240,7 +251,7 @@ montecarlo:
   # --default (or auto): <repo>/tutorial/template, resolved from the location of
   #   montecarlo.py, independent of the current directory
   template_path_specify: manual # default or manual
-  template_path: ../template_wind
+  template_path: ../template_wind_table
 
   # Target variables to be changed in the Monte Carlo routine
   # --[variable name, section name, dispersion]
@@ -253,9 +264,9 @@ montecarlo:
   #   wind, and the two are told apart by it.
   target_variable:
     -
-      - velocity # Variable name
+      - velocity_factor # Variable name
       - wind # Variable's root name
-      - 1.0          # Dispersion in random
+      - 0.4          # Dispersion in random
 # --Uncommenting the density below scatters the atmospheric density as well. It is
 #   worth trying once: +-10 % on the density spreads the impact point by some 80 km
 #   along the ground track, which is an order of magnitude more than the wind, and
@@ -295,6 +306,6 @@ montecarlo:
   flag_allow_failure: False
 
   # Gathered result of all the cases (one Tecplot file, one zone per case)
-  result_dir: result_tacode
+  result_dir: result_tacode_table
   flag_tecplot: True
   filename_tecplot: tecplot_taresult.dat

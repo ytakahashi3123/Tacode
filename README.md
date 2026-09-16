@@ -741,7 +741,7 @@ Standard deviation:  East 8.407 km,  North 4.185 km
 The mean offset is where the nominal wind puts the impact point, and the standard
 deviation is what the uncertainty on that wind costs. The cases are drawn at random and
 no seed is set, so the numbers still move by a few hundred metres from run to run at 100
-cases; the whole run takes some 20 s.
+cases; the whole run takes 7 s on a 24-core machine.
 
 `--plot` draws the cases with their 1, 2 and 3 sigma covariance ellipses and the CEP 50 %
 circle. Ellipses rather than circles: a wind uncertainty spreads the impact point mostly
@@ -793,14 +793,24 @@ control file and a table is selected by its file name. What can be scattered is
       - 0.4          # Dispersion in random
 ```
 
-Copy `tutorial/work_reentry_wind_table` to serve as the template (its `run_tacode.sh`
-takes the path of `src/` as `$1`, as `tutorial/template_wind/run_tacode.sh` does) and
-point `montecarlo.template_path` at it. Scattering the merged NCEP+HWM14 field by +-20 %
-in this way moves the impact point by 10.1 km west and 7.8 km north on average — the
-nominal table, as it must be — with a standard deviation of 1.05 km east-west and 0.82 km
-north-south. That measures the uncertainty on the *strength* of a known field, which is a
-different question from the +-50 % on a uniform wind above; neither brackets the error of
-the field itself.
+`tutorial/work_montecarlo_wind/config_table.yml` is that run, over
+`tutorial/template_wind_table` — the same entry, flown through the merged NCEP+HWM14
+field rather than a uniform wind:
+
+```console
+cd tutorial/work_montecarlo_wind
+./run_tacode-mc.sh -file config_table.yml
+python3 ../../src_helper/montecarlo_dispersion/montecarlo_dispersion.py \
+    work_montecarlo_wind_table --reference ../work_reentry/output_result/tecplot.dat \
+    --mark "table as given=../work_reentry_wind_table/output_result/tecplot.dat"
+```
+
+Scattering the field by +-20 % moves the impact point 10.11 km west and 7.84 km north on
+average, which is where the nominal table puts it — the mark lands within a metre of the
+mean, as it must — with a standard deviation of 1.20 km east-west and 0.93 km
+north-south, against 8.4 and 4.2 km for the uniform wind above. That measures the
+uncertainty on the *strength* of a known field, which is a different question from the
++-50 % on a uniform wind; neither brackets the error of the field itself.
 
 
 ## Configuration file

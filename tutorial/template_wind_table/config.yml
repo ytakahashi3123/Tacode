@@ -120,18 +120,14 @@ wind:
   # Wind model
   # --constant: one uniform wind everywhere
   # --fileread: interpolate a table of longitude x latitude x altitude
-  kind_wind_model: constant
+  kind_wind_model: fileread
 
   # Wind model: constant settings
   # --[East, North, Up] in the local geocentric horizon, m/s. This is the frame the
   #   initial velocity already uses, so the two are given the same way. It is
   #   geocentric, not geodetic; see the note in README.md.
-  # --This is the nominal wind of the Monte-Carlo tutorial. tacode-montecarlo.py
-  #   overwrites these three lines case by case, multiplying each component by
-  #   (1 + dispersion*(U - 0.5)) with U uniform in [0, 1). The dispersion is
-  #   relative, so a component left at 0.0 stays 0.0 in every case.
-  #   The nominal values are read from the Monte-Carlo control file, not from
-  #   here; keep the two in step. See the Monte-Carlo section of README.md.
+  # --Not used here: kind_wind_model above is fileread. Kept so that this template
+  #   and template_wind can be read side by side.
   velocity:
     - 20.0
     - 10.0
@@ -139,9 +135,13 @@ wind:
 
   # Wind model: file input
   # --Path resolution is the same as satellite.directory_path_specify
+  # --wind_merged_20240101_pacific.txt is real data: NCEP/NCAR Reanalysis 1 for
+  #   2024-01-01T00Z below 31 km, HWM14 above, merged through a 20-30 km transition
+  #   layer, on a 9 x 9 x 42 grid covering 130-110 W, 25-5 S and 0-500 km. It is the
+  #   same table tutorial/work_reentry_wind_table runs through once.
   directory_path_specify: manual # default or manual
   directory_wind: database/wind
-  filename_wind: windmodel.txt
+  filename_wind: wind_merged_20240101_pacific.txt
 
   # Treatment outside the altitude range of the table
   # --zero (default): no wind there, that is, the atmosphere co-rotates with the Earth
@@ -152,9 +152,13 @@ wind:
   kind_extrapolation: zero
 
   # Scale factor applied to the wind, whatever the model (1.0 = the wind as given)
-  # --Written as a one-element list because the Monte-Carlo routine perturbs it
-  #   element by element. This is how a wind TABLE is scattered: the driver
-  #   rewrites numbers in the control file, and a table is chosen by its file name.
+  # --**This is what the Monte-Carlo tutorial scatters here.** A table is chosen by
+  #   its file name, so the strength of the whole field is the one number the driver
+  #   can vary; tacode-montecarlo.py overwrites the line below case by case with
+  #   1.0*(1 + dispersion*(U - 0.5)), U uniform in [0, 1).
+  # --What that measures is the uncertainty in the STRENGTH of a field taken as
+  #   known, not the error of the field itself. The nominal value is read from the
+  #   Monte-Carlo control file, not from here; keep the two in step.
   # --1.0 leaves the result bit for bit as it is without this key.
   velocity_factor:
     - 1.0
@@ -227,74 +231,3 @@ post_process:
     # --Output frequency
     frequency_output: 1
 
-
-
-# Monte-Carlo process
-montecarlo:
-  # TAcode case directory
-  work_dir: work_montecarlo_wind
-  case_dir: case
-
-  # Template path for Tacode work directory
-  # --manual: template_path below, relative to the current directory
-  # --default (or auto): <repo>/tutorial/template, resolved from the location of
-  #   montecarlo.py, independent of the current directory
-  template_path_specify: manual # default or manual
-  template_path: ../template_wind
-
-  # Target variables to be changed in the Monte Carlo routine
-  # --[variable name, section name, dispersion]
-  # --The nominal values are read from THIS file, and the corresponding lines of
-  #   the template control file are overwritten case by case with
-  #     value * (1 + dispersion*(U - 0.5)),  U uniform in [0, 1)
-  #   that is, a uniform relative scatter of +-dispersion/2 on each element.
-  #   The scatter is relative: an element whose nominal value is 0.0 stays 0.0.
-  # --The section name matters: "velocity" exists both in initial_settings and in
-  #   wind, and the two are told apart by it.
-  target_variable:
-    -
-      - velocity # Variable name
-      - wind # Variable's root name
-      - 1.0          # Dispersion in random
-# --Uncommenting the density below scatters the atmospheric density as well. It is
-#   worth trying once: +-10 % on the density spreads the impact point by some 80 km
-#   along the ground track, which is an order of magnitude more than the wind, and
-#   the wind then hides inside it. Keep them separate to read either one.
-#    -
-#      - density_factor # Variable name
-#      - initial_settings # Variable's root name
-#      - 0.2          # Dispersion in random
-
-  # Executing script
-  cmd_shell: ./run_tacode.sh
-
-  # Control file
-  filename_control: config.yml
-
-  # Result file computed by Tacode, relative to the case directory
-  # --This is what the postprocess gathers into one file, one zone per case
-  filename_trajectory: output_result/tecplot.dat
-
-  # Number of iteraction in Monte-Carlo routine
-  # --100 cases take 7 s on a 24-core machine. The statistics of the impact
-  #   point still move by a few hundred metres from run to run at this number;
-  #   the cases are drawn at random and no seed is set.
-  number_iteration: 100
-
-  # Maximum number of execution in parallel
-  # --auto: as many as this machine has logical cores. A number fixed here only
-  #   suits the machine it was written on, and the cases are independent
-  #   processes, so the memory in use grows with it (about 90 MB per case).
-  # --The cases are launched in batches of this size and every batch is waited
-  #   for before the next one starts, so a batch costs as much as its slowest
-  #   case.
-  maximum_number_execution: auto
-
-  # Stop if any case does not complete (False, the default), or go on with the
-  # cases that did complete (True)
-  flag_allow_failure: False
-
-  # Gathered result of all the cases (one Tecplot file, one zone per case)
-  result_dir: result_tacode
-  flag_tecplot: True
-  filename_tecplot: tecplot_taresult.dat

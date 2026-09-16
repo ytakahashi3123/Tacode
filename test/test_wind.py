@@ -42,7 +42,8 @@ CONFIG_REENTRY = os.path.join(ROOT_DIR, 'tutorial', 'work_reentry', 'config.yml'
 # 持たない（回帰テストの対象外）
 CONFIG_WIND_ON = [os.path.join(ROOT_DIR, 'tutorial', 'work_montecarlo_wind', 'config.yml'),
                   os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_wind_table', 'config.yml'),
-                  os.path.join(ROOT_DIR, 'tutorial', 'template_wind', 'config.yml')]
+                  os.path.join(ROOT_DIR, 'tutorial', 'template_wind', 'config.yml'),
+                  os.path.join(ROOT_DIR, 'tutorial', 'template_wind_table', 'config.yml')]
 
 
 def read_tecplot(path):

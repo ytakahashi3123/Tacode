@@ -24,10 +24,12 @@ log_montecarlo_animation
 # (montecarlo.work_dir in config.yml; created next to the case directory)
 tutorial/work_montecarlo/work_montecarlo/
 tutorial/work_montecarlo_wind/work_montecarlo_wind/
+tutorial/work_montecarlo_wind/work_montecarlo_wind_table/
 
 # Gathered Monte-Carlo results (montecarlo.result_dir in config.yml)
 tutorial/work_montecarlo/result_tacode/
 tutorial/work_montecarlo_wind/result_tacode/
+tutorial/work_montecarlo_wind/result_tacode_table/
 
 # Figures and animations drawn by the tools in src_helper/
 tutorial/work_montecarlo*/montecarlo_dispersion*

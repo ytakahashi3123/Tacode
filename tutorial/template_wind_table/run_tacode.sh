@@ -1,10 +1,6 @@
 #!/bin/bash
 
-# tee でログを取るので、パイプの左（Python）の終了コードを拾うために pipefail を立てる
-# （既定では tee の終了コードが返り、計算が落ちてもシェルは 0 を返す）
-set -o pipefail
-
-TACODE_HOME=../../src
+TACODE_HOME=$1
 
 # Python interpreter, in order of preference:
 #   1. $TACODE_PYTHON, if set
@@ -17,10 +13,10 @@ elif [ -x "$TACODE_HOME/../.venv/bin/python" ]; then
 else
   PYTHON_RUN=python3
 fi
-LD=$TACODE_HOME/tacode-montecarlo.py
-LOG=log_tacode_montecarlo
+LD=$TACODE_HOME/tacode.py
+LOG=log_tacode
 
 export OMP_NUM_THREADS=1
 
-#$PYTHON_RUN $LD > $LOG
-$PYTHON_RUN  $LD "$@" 2>&1 | tee $LOG
+$PYTHON_RUN $LD > $LOG
+#$PYTHON_RUN  $LD 2>&1 | tee $LOG
