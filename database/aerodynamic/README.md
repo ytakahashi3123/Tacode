@@ -5,15 +5,17 @@ computation only reads the drag coefficient (`CFx` at the smallest angle of atta
 the table); the 6-DOF computation reads the whole set of force and moment coefficients
 and interpolates them in the angle of attack as well.
 
-| File | Angles of attack | Knudsen range | Source |
-|---|---|---|---|
-| `aerodynamic.txt` | 0° only | 0.203 – 4.35e4 | DSMC + CFD of the EGG re-entry capsule |
-| `aerodynamic_spherecone_aoa.txt` | 0–180°, every 10° | 1e-4 – 1e5 | analytic sphere-cone model, see below |
-| `aerodynamic_apollo_aoa.txt` | 0–180°, every 5° | 1e-4 – 1e5 | the same model over the Apollo command module, see below |
+| File | Angles of attack | Knudsen range | Reference length | Source |
+|---|---|---|---|---|
+| `aerodynamic.txt` | 0° only | 0.203 – 4.35e4 | 0.8 m | DSMC + CFD of the EGG re-entry capsule |
+| `aerodynamic_spherecone_aoa.txt` | 0–180°, every 10° | 1e-4 – 1e5 | 0.5 m | analytic sphere-cone model, see below |
+| `aerodynamic_apollo_aoa.txt` | 0–180°, every 5° | 1e-4 – 1e5 | 3.9116 m | the same model over the Apollo command module, see below |
+| `aerodynamic_fire2.txt` | 0–180°, every 5° | 1e-4 – 1e5 | 0.672 m | NASA TN D-4183 figure 4, for `validation/fire2` |
 
 `aerodynamic.txt` is the default used by `tutorial/work`, `tutorial/work_reentry` and
 `tutorial/template`, and it is what the committed reference outputs were produced with.
-It stays unchanged.
+Its numbers stay unchanged (the `# Reference length` line added in 2026-09 is a header
+comment and is skipped when the table is read).
 
 This directory is the master copy. Each case directory keeps the table it actually uses
 in `<case>/database/aerodynamic` and reads it from there — `aerodynamic.txt` for the
@@ -28,6 +30,7 @@ tumble rather than oscillate about trim. The code prints a warning when this hap
 
 ```
 <any header line that is not a row of numbers>
+# Reference length: 0.8 m
 variables = Kn, CFx, CFy, CFz, CMx, CMy, CMz, SDV_CFx ... SDV_CMz, Altitude
 AOA 0
 <14 numbers per row, one row per Knudsen number>
@@ -46,6 +49,41 @@ AOA 10
   an error otherwise.
 * Outside the table the values are clamped to the edge, in both the angle of attack and
   the Knudsen number.
+* `# Reference length:` is optional and names the length the Knudsen axis was built
+  with, in metres. See below.
+
+## Reference length
+
+`Kn = λ/L`, so **the Knudsen axis of a table belongs to the length that table was built
+with**. Entering it with another length reads the drag off a different part of the
+curve, and the same length also normalises the moment coefficients, so a 6-DOF run
+scales its moments by it too. Nothing in the numbers says which length was used, so the
+table can declare it:
+
+```
+# Reference length: 0.8 m
+```
+
+When the line is there and `satellite.characteristic_length` differs from it, the run
+prints a caution naming both values and how far apart the two Knudsen axes are. **It
+does not stop**: applying a table to another body is a legitimate approximation, and the
+shipped tutorials do exactly that. A table without the line is not checked at all, so
+tables of unknown provenance still read.
+
+`generate_aerodynamic_table.py` and `validation/fire2/digitize_aerodynamics.py` write
+the line. `aerodynamic.txt` arrived without one — it is external DSMC + CFD data — so
+its 0.8 m was **recovered from the table itself**: every row carries the altitude its
+Knudsen number corresponds to, and `L = Kn(L = 1 m)/Kn_table` read against
+`atmospheremodel.txt` gives 0.8000 m on all eight rows.
+`test_atmosphere.TestTheReferenceLengthOfTheAerodynamicTable` keeps that derivation.
+
+**The re-entry tutorials read this table with `characteristic_length: 0.5`**
+(`tutorial/work_reentry`, `work_reentry_wind_table`, `template_wind`,
+`work_montecarlo_wind`) and therefore print the caution. The consequence is small: the
+drag differs by at most 0.73 %, and only above 100 km — below that both lengths fall off
+the bottom of the Knudsen axis and clamp to the same `CFx`. Correcting it would move the
+committed reference outputs, so the mismatch is left as it stands and named here
+instead.
 
 ## Sign convention
 

@@ -332,6 +332,7 @@ def set_knudsen_number(config, atmosphere_dict):
   num_atm  = atmosphere_dict[KEY_ATM]
 
   d2_nd_total = np.zeros(num_data).reshape(num_data)
+  kind_found  = []
   for m in range(0, len(LIST_MOLECULAR_KIND) ):
     key_tmp      = LIST_MOLECULAR_KIND[m]
     try:
@@ -339,10 +340,25 @@ def set_knudsen_number(config, atmosphere_dict):
       diamter      = DICT_DIAMETER_MOLECULAR[key_tmp]
     except KeyError as instance:
       continue
+    kind_found.append( key_tmp )
     # Calculate sum( nd*diamter^2 )
     for n in range(0,num_data):
       d2_nd_total[n] = d2_nd_total[n] + numb_density[n]*diamter**2
-  
+
+  # 分子種が 1 つも無いテーブルでは sum(n d^2) が 0 のままで、Kn が全高度で Inf になる。
+  # 上の except は「その種が無い」を読み飛ばすためのものなので、全部無いという場合まで
+  # 黙って通してしまう。Inf の Kn は空力係数表の上端にクランプされ、警告も出ないまま
+  # 自由分子流の係数で計算が進むので、ここで止める（CODE_REVIEW B-10）。
+  if len(kind_found) == 0 :
+    print('The atmosphere table has no molecular number density.')
+    print('--The Knudsen number is built from sum( n d^2 ) over', ', '.join(LIST_MOLECULAR_KIND) + ',')
+    print('--and the table has none of them, so the mean free path cannot be formed.')
+    print('--File:', config['atmosphere']['filename_atmosphere'])
+    print('Program stopped.')
+    sys.exit(1)
+
+  print('--Molecular species used for the mean free path:', ', '.join(kind_found))
+
   knudsen_number = 1.0/( np.sqrt(2.0)*np.pi*d2_nd_total*length)
   atmosphere_dict[KEY_KN] = knudsen_number
 

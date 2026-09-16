@@ -20,17 +20,25 @@ TABLE_FILENAME = 'aerodynamic_test.txt'
 COLUMN_SPARE = '\t'.join(['0.0']*6)
 
 
-def write_aerodynamic_table(block, directory):
+def write_aerodynamic_table(block, directory, length_reference=None):
     """
     合成の空力係数表を書く。
 
     block は (迎角, 行の並び) の並びで、行は
     [Kn, CFx, CFy, CFz, CMx, CMy, CMz, Altitude]。迎角に None を渡すと
     "AOA" 行を書かない（従来形式のファイル）。標準偏差の 6 列は 0 で埋める。
+
+    length_reference を渡すと "# Reference length: ..." の行を足す（文字列で
+    渡せばそのまま書くので、壊れた行も作れる）。
     """
     path = os.path.join(directory, TABLE_FILENAME)
     with open(path, 'w') as f:
         f.write('test table\n')
+        if length_reference is not None:
+            if isinstance(length_reference, str):
+                f.write('# {}{}\n'.format(satellite.MARKER_LENGTH_REFERENCE, length_reference))
+            else:
+                f.write('# {}: {:g} m\n'.format(satellite.MARKER_LENGTH_REFERENCE, length_reference))
         f.write('variables = Kn, CFx, CFy, CFz, CMx, CMy, CMz, SDV..., Altitude\n')
         for angle, rows in block:
             if angle is not None:
@@ -56,6 +64,17 @@ def read_aerodynamic_table(block):
         write_aerodynamic_table(block, directory)
         with quiet():
             return satellite.initial_settings_satellite(aerodynamic_config(directory))
+
+
+def read_aerodynamic_table_with_length(block, length_reference, length_config):
+    """代表長さを書いた合成テーブルを読み込み、(辞書, 出力) を返す。"""
+    with tempfile.TemporaryDirectory() as directory:
+        write_aerodynamic_table(block, directory, length_reference)
+        config = aerodynamic_config(directory)
+        config['satellite']['characteristic_length'] = length_config
+        with quiet() as buffer:
+            aerodynamic_dict = satellite.initial_settings_satellite(config)
+        return aerodynamic_dict, buffer.getvalue()
 
 
 class TestAtmosphereTable(unittest.TestCase):
@@ -876,6 +895,192 @@ class TestBilinearMatchesScipy(unittest.TestCase):
 
 # 呼び出しとしての interp1d（コメントや説明文の中は見ない）
 PATTERN_INTERP1D = re.compile(r'\binterp1d\s*\(')
+
+
+ROWS_AERODYNAMIC = [[1.0e-2, 1.10, 0.0, 0.0, 0.0, 0.0, 0.0, 80.0],
+                    [1.0e+0, 1.20, 0.0, 0.0, 0.0, 0.0, 0.0, 110.0],
+                    [1.0e+2, 1.30, 0.0, 0.0, 0.0, 0.0, 0.0, 160.0]]
+
+
+class TestTheReferenceLengthOfTheAerodynamicTable(unittest.TestCase):
+    """
+    係数表が「どの代表長さで Kn 軸を作ったか」を宣言でき、食い違いが知らされること
+    （CODE_REVIEW B-7）。
+
+    Kn = lambda/L なので、表の Kn 軸は表を作ったときの L に紐づいている。別の L で
+    引くと同じ高度に対して表の別の場所を読むことになり、CD が黙ってずれる。
+    表が代表長さを書いていれば読み込み時に突き合わせられる。
+
+    **停止はしない。**手元の表を別の機体に当てるのは近似と割り切れば実際に行うことで、
+    同梱の再突入チュートリアルがまさにそれをしている（`aerodynamic.txt` は 0.8 m で
+    作られているが、ケースの characteristic_length は 0.5 m）。軸対称でない表を
+    使うときと同じく、知らせるだけにしてある。
+    """
+
+    def test_a_matching_length_says_nothing(self):
+        aerodynamic_dict, output = read_aerodynamic_table_with_length(
+            [(0.0, ROWS_AERODYNAMIC)], 0.8, 0.8)
+        self.assertEqual(aerodynamic_dict[satellite.KEY_LENGTH_REF], 0.8)
+        self.assertNotIn('Caution', output)
+
+    def test_a_different_length_is_reported_with_both_values(self):
+        aerodynamic_dict, output = read_aerodynamic_table_with_length(
+            [(0.0, ROWS_AERODYNAMIC)], 0.8, 0.5)
+        self.assertEqual(aerodynamic_dict[satellite.KEY_LENGTH_REF], 0.8)
+        self.assertIn('Caution', output)
+        self.assertIn('0.8', output)
+        self.assertIn('0.5', output)
+        # 表そのものは読めているので計算は続く
+        np.testing.assert_allclose(aerodynamic_dict[satellite.KEY_CD_MEAN],
+                                   [row[1] for row in ROWS_AERODYNAMIC])
+
+    def test_a_table_without_the_line_is_not_checked(self):
+        # 出所の分からない古いファイルが読めなくなっては困る
+        aerodynamic_dict, output = read_aerodynamic_table_with_length(
+            [(0.0, ROWS_AERODYNAMIC)], None, 0.5)
+        self.assertIsNone(aerodynamic_dict[satellite.KEY_LENGTH_REF])
+        self.assertNotIn('Caution', output)
+
+    def test_a_line_without_a_number_stops(self):
+        # 目印はあるのに値が読めない行は、書いたつもりの検査が黙って消えるので止める
+        for broken in (': m', '', ': abc m'):
+            with self.subTest(line=broken):
+                with self.assertRaises(SystemExit) as raised:
+                    read_aerodynamic_table_with_length(
+                        [(0.0, ROWS_AERODYNAMIC)], broken, 0.5)
+                self.assertEqual(raised.exception.code, 1)
+
+    def test_every_shipped_table_declares_a_reference_length(self):
+        for path in sorted(glob.glob(os.path.join(ROOT_DIR, 'database', 'aerodynamic', '*.txt'))):
+            with self.subTest(table=os.path.basename(path)):
+                with quiet():
+                    _, _, length_reference = satellite.parse_aerodynamic_file(path)
+                self.assertIsNotNone(length_reference)
+                self.assertGreater(length_reference, 0.0)
+
+    def test_the_length_of_the_egg_table_follows_from_its_altitude_column(self):
+        """
+        `aerodynamic.txt` の 0.8 m が、その表自身の Altitude 列から出てくること。
+
+        この表は外から来た DSMC + CFD のデータで、代表長さがどこにも書かれていな
+        かった。各行は Kn とその Kn に対応する高度を持つので、大気テーブルから
+        「代表長さ 1 m での Kn」を引けば L = Kn(L=1)/Kn_table として復元できる。
+        2026-09-16 にそうやって求めたところ、**8 行すべてで 0.8000 m** だった。
+        表に書いた宣言はその値で、ここはその根拠をテストとして残しておくもの。
+
+        解析モデルで作った表（球円錐・アポロ）の Altitude 列は Kn に対する線形内挿で
+        求めた参考値でしかないので、この復元は効かない（生成器が代表長さを書くので、
+        そちらは作りで保証されている）。`aerodynamic_fire2.txt` は Altitude 列が 0。
+        """
+        config = load_config()
+        config['satellite']['characteristic_length'] = 1.0
+        config['atmosphere']['directory_path_specify'] = 'default'
+        config['atmosphere']['filename_atmosphere'] = 'atmospheremodel.txt'
+        with quiet():
+            atm = atmosphere.initial_settings_atmosphere(config)
+
+        path = os.path.join(ROOT_DIR, 'database', 'aerodynamic', 'aerodynamic.txt')
+        with quiet():
+            _, block, length_reference = satellite.parse_aerodynamic_file(path)
+
+        recovered = np.interp(block[0][:, 13], atm[atmosphere.KEY_Height],
+                              atm[atmosphere.KEY_KN])/block[0][:, 0]
+        np.testing.assert_allclose(recovered, length_reference, rtol=1.e-4)
+
+    def test_the_cases_that_differ_from_their_table_are_the_known_ones(self):
+        """
+        同梱の config のうち、表の代表長さと食い違っているものを固定する。
+
+        食い違っているのは**再突入のチュートリアル 4 つ**だけで、いずれも EGG の表
+        （0.8 m で作られている）を 0.5 m の機体に当てている。CD の差は 100 km より上で
+        最大 0.73 %、それより下では表の下端にクランプされて同じ値になるので、
+        チュートリアルの軌道はこの食い違いで動かない（2026-09-16 実測）。
+
+        新しいケースを足したときに黙って仲間が増えないよう、ここで並びを固定する。
+        減らす（ケースを直す）ときは出力が動くので、参照出力の更新とセットになる。
+        """
+        expected = {'tutorial/template_wind', 'tutorial/work_montecarlo_wind',
+                    'tutorial/work_reentry', 'tutorial/work_reentry_wind_table'}
+
+        different = set()
+        for path in sorted(glob.glob(os.path.join(ROOT_DIR, 'tutorial', '*', 'config.yml'))
+                           + glob.glob(os.path.join(ROOT_DIR, 'validation', '*', 'config*.yml'))):
+            config = load_config(path)
+            section = config['satellite']
+            if section.get('kind_aerodynamic_model') != 'fileread':
+                continue
+            directory = satellite.get_database_directory(section, 'satellite', 'aerodynamic',
+                                                         'directory_aerodynamic')
+            with quiet():
+                _, _, length_reference = satellite.parse_aerodynamic_file(
+                    os.path.join(directory, section['filename_aerodynamic']))
+            if length_reference is None:
+                continue
+            if abs(length_reference - section['characteristic_length']) \
+               > satellite.TOLERANCE_LENGTH_REFERENCE*length_reference:
+                different.add(os.path.relpath(os.path.dirname(path), ROOT_DIR).replace(os.sep, '/'))
+
+        self.assertEqual(different, expected)
+
+
+class TestTheKnudsenNumberNeedsMolecularDensities(unittest.TestCase):
+    """
+    分子種の数密度を 1 つも持たないテーブルで止まること（CODE_REVIEW B-10）。
+
+    Kn は sum( n d^2 ) から作る。その和を取るループは「その種が無い」を読み飛ばす
+    ので、**4 種とも無いテーブルでは和が 0 のままになり、Kn が全高度で Inf になる**。
+    Inf は係数表の上端にクランプされるので、警告も出ないまま自由分子流の係数で
+    計算が進んでしまう。
+    """
+
+    HEADER = ['a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',
+              ' IDAY           0',
+              ' UT   0.00000000    ',
+              ' F107A   76.5999985    ',
+              ' F107   76.5999985    ',
+              ' APH   8.39999962       7.00000000    ',
+              ' 1, ALTITUDE (KM)',
+              ' 2, D(6) - TOTAL MASS DENSITY(GM/CM3)',
+              ' 3, T(2) - TEMPERATURE AT ALT',
+              '           1           2           3']
+
+    ROWS = [(0.0, 1.256e-03, 279.0),
+            (200.0, 1.870e-13, 742.0),
+            (400.0, 8.950e-16, 783.0)]
+
+    def test_a_table_without_any_species_stops(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lines = list(self.HEADER)
+            for row in self.ROWS:
+                lines.append('   %.6f       %.8E   %.6f       ' % row)
+            with open(os.path.join(directory, 'atmospheremodel.txt'), 'w') as f:
+                f.write('\n'.join(lines) + '\n')
+
+            config = load_config()
+            config['atmosphere']['directory_path_specify'] = 'manual'
+            config['atmosphere']['directory_atmosphere'] = directory
+            config['atmosphere']['filename_atmosphere'] = 'atmospheremodel.txt'
+
+            with quiet() as buffer:
+                with self.assertRaises(SystemExit) as raised:
+                    atmosphere.initial_settings_atmosphere(config)
+
+        self.assertEqual(raised.exception.code, 1)
+        self.assertIn('no molecular number density', buffer.getvalue())
+
+    def test_the_shipped_tables_carry_all_four_species(self):
+        config = load_config()
+        for name in ('atmospheremodel.txt', 'atmospheremodel_2015_700km.txt',
+                     'atmospheremodel_700km.txt'):
+            with self.subTest(table=name):
+                config['atmosphere']['directory_path_specify'] = 'default'
+                config['atmosphere']['filename_atmosphere'] = name
+                with quiet() as buffer:
+                    atm = atmosphere.initial_settings_atmosphere(config)
+                for key in atmosphere.LIST_MOLECULAR_KIND:
+                    self.assertIn(key, atm, name)
+                self.assertTrue(np.all(np.isfinite(atm[atmosphere.KEY_KN])), name)
+                self.assertIn('Molecular species used', buffer.getvalue())
 
 
 class TestTheSourceDoesNotUseLegacySciPy(unittest.TestCase):

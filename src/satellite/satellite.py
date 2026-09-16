@@ -25,6 +25,7 @@ KEY_CF      = 'Force_coefficient'
 KEY_CM      = 'Moment_coefficient'
 KEY_COEF    = 'Coefficient'
 KEY_FILE    = 'Filename'
+KEY_LENGTH_REF = 'Length_reference'   # 表の Knudsen 数を作った代表長さ（書いていなければ None）
 
 # 空力データベースの列数（Kn, CFx..CMz, SDV_CFx..SDV_CMz, Altitude）
 NUM_COLUMN_AERODYNAMIC = 14
@@ -32,6 +33,11 @@ NUM_COLUMN_AERODYNAMIC = 14
 # 軸対称性の判定: 面内成分に対する比の閾値と、丸め誤差を拾わないための下限
 TOLERANCE_AXISYMMETRY = 1.e-3
 FLOOR_AXISYMMETRY     = 1.e-12
+
+# 係数表の見出しに書ける「この表の Knudsen 数を作った代表長さ」の目印と、
+# config の characteristic_length と食い違っているとみなす相対差
+MARKER_LENGTH_REFERENCE   = 'Reference length'
+TOLERANCE_LENGTH_REFERENCE = 1.e-6
 
 
 def initial_settings_satellite(config):
@@ -174,7 +180,7 @@ def read_aerodynamic_file(config):
   filename_tmp = directory_path + '/' + config['satellite']['filename_aerodynamic']
   print('Reading aerodynamic model...:', filename_tmp)
 
-  angle_of_attack, data_block = parse_aerodynamic_file(filename_tmp)
+  angle_of_attack, data_block, length_reference = parse_aerodynamic_file(filename_tmp)
 
   # 各ブロックは同じ Knudsen 数の並びでなければ (AOA, Kn) の格子にならない
   kn_aero = data_block[0][:,0]
@@ -198,17 +204,83 @@ def read_aerodynamic_file(config):
   alt_aero = data_block[0][:,13]
 
   # 3 自由度計算で使う CD は迎角 0 に最も近いブロックの CFx とする
-  # （従来の AOA 0 のみのファイルではそのブロックそのもの）
+  # （従来の AOA 0 のみのファイルではそのブロックそのもの）。
+  #
+  # **同じ表を 2 通りに使っていることに注意**（CODE_REVIEW B-8）。3 自由度は
+  # ここで取り出す 1 本の CD(Kn) だけを使い（get_aerodynamic_coefficient）、
+  # 6 自由度は (迎角, Kn) の格子として表全体を引く
+  # （get_aerodynamic_coefficient_attitude）。迎角 0 では両者はビット一致する。
   index_zero = int(np.argmin(np.abs(angle_of_attack)))
   cfx_mean   = coefficient_force[index_zero,:,0]
 
   print('--Angles of attack in the table (deg.):', ', '.join(['{:g}'.format(value) for value in angle_of_attack]))
 
+  warn_if_length_differs(config, filename_tmp, length_reference)
+
   aerodynamic_dict = {KEY_KN:kn_aero, KEY_CD_MEAN:cfx_mean, KEY_ALT:alt_aero,
                       KEY_AOA:angle_of_attack, KEY_CF:coefficient_force, KEY_CM:coefficient_moment,
-                      KEY_FILE:filename_tmp}
+                      KEY_FILE:filename_tmp, KEY_LENGTH_REF:length_reference}
 
   return aerodynamic_dict
+
+
+def parse_length_reference(line, filename_tmp):
+  #
+  # 見出しの "# Reference length: <値> m" を読む。その行でなければ None を返す。
+  #
+  # 目印はあるのに数値が読めない行は止める（書いたつもりの値が黙って無視され、
+  # 検査も黙って行われなくなるため）。
+  #
+  text = line.lstrip('#').strip()
+  if not text.lower().startswith( MARKER_LENGTH_REFERENCE.lower() ) :
+    return None
+
+  field = text.split(':', 1)
+  word  = field[1].split() if len(field) > 1 else []
+  try:
+    return float(word[0])
+  except (IndexError, ValueError):
+    print('The "{}" line of the aerodynamic table has no number.'.format(MARKER_LENGTH_REFERENCE))
+    print('--Line:', line.strip())
+    print('--File:', filename_tmp)
+    print('--Write it as "# {}: 0.8 m", or leave the line out.'.format(MARKER_LENGTH_REFERENCE))
+    print('Program stopped.')
+    sys.exit(1)
+
+
+def warn_if_length_differs(config, filename_tmp, length_reference):
+  #
+  # 表の Knudsen 数を作った代表長さと、この計算の代表長さが食い違っていないか
+  # （CODE_REVIEW B-7）。
+  #
+  # Kn = lambda/L なので、**表の Kn 軸は表を作ったときの L に紐づいている**。別の L で
+  # 引くと、同じ高度に対して表の別の場所を読むことになり、CD が黙ってずれる。
+  # 代表長さはモーメント係数の規格化にも使われるので、6 自由度ではモーメントも動く。
+  #
+  # **停止はしない。**手元にある表を別の機体に当てるのは、近似と割り切れば実際に行う
+  # ことで（同梱のチュートリアルと Apollo の 3 自由度ケースがまさにそれをしている）、
+  # 軸対称でない表を使うとき（warn_if_not_axisymmetric）と同じ扱いにしてある。
+  #
+  # 代表長さを書いていない表は検査しない（出所の分からない古いファイルが読めなくなる）。
+  #
+  if length_reference is None :
+    return False
+
+  length = float( config['satellite'][KEY_LENGTH] )
+  if abs( length - length_reference ) <= TOLERANCE_LENGTH_REFERENCE*max( abs(length_reference), abs(length) ) :
+    return False
+
+  print('Caution: the Knudsen axis of the aerodynamic table was built for a different body.')
+  print('--File :', filename_tmp)
+  print('--Table: reference length {:g} m'.format(length_reference))
+  print('--Case : satellite.characteristic_length = {:g} m'.format(length))
+  print('--At a given altitude this run enters the table at {:.4g} times the Knudsen number'.format(
+        length_reference/length))
+  print('--the table associates with it, so the drag is read off the wrong part of the curve.')
+  print('--The 6-DOF moments are scaled by the same length as well.')
+  print('--Use the length the table was built with, or a table built for this body.')
+
+  return True
 
 
 def parse_aerodynamic_file(filename_tmp):
@@ -216,6 +288,7 @@ def parse_aerodynamic_file(filename_tmp):
   # 空力データベースを読む。迎角ごとのブロックに対応する。
   #
   #   <見出し行（数値でない行は読み飛ばす）>
+  #   # Reference length: <値> m      <- 任意。あれば代表長さの食い違いを検査する
   #   AOA 0
   #   <Kn, CFx, CFy, CFz, CMx, CMy, CMz, SDV_CFx ... SDV_CMz, Altitude>
   #   ...
@@ -227,15 +300,19 @@ def parse_aerodynamic_file(filename_tmp):
   with open(filename_tmp) as f:
     lines = f.readlines()
 
-  angle_of_attack = []
-  data_block      = []
-  data_current    = None
+  angle_of_attack  = []
+  data_block       = []
+  data_current     = None
+  length_reference = None
 
   for line in lines:
     words = line.split()
     if len(words) == 0 :
       continue
     if words[0].startswith('#') :
+      value = parse_length_reference(line, filename_tmp)
+      if value is not None :
+        length_reference = value
       continue
 
     # 迎角の見出し行
@@ -284,7 +361,7 @@ def parse_aerodynamic_file(filename_tmp):
     print('Program stopped.')
     sys.exit(1)
 
-  return angle_of_attack, data_block
+  return angle_of_attack, data_block, length_reference
 
 
 def get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic):
@@ -310,6 +387,10 @@ def get_aerodynamic_coefficient_attitude(knudsen, angle_attack_total, aerodynami
   #   coefficient_moment = [CMx, CMy, CMz]
   #
   # 表の外側は端の値でクランプする（1 次元の CD と同じ扱い）。
+  #
+  # **3 自由度とは同じ表の使い方が違う**（CODE_REVIEW B-8）。3 自由度が使うのは
+  # read_aerodynamic_file が取り出した「迎角 0 ブロックの CFx」1 本だけで、
+  # ここは (迎角, Kn) の格子として表全体を引く。迎角 0 では両者はビット一致する。
   #
   knudsen_table = aerodynamic_dict[KEY_KN]
   aoa_table     = aerodynamic_dict[KEY_AOA]

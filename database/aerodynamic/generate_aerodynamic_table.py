@@ -313,6 +313,9 @@ def main():
 
   with open(args.output, 'w') as file:
     file.write(title + '\n')
+    # Kn 軸を作った代表長さを書いておく。読み取り側（satellite.warn_if_length_differs）が
+    # config の characteristic_length と突き合わせる
+    file.write('# Reference length: {:g} m\n'.format(length_reference))
     file.write('variables = Kn, CFx, CFy, CFz, CMx, CMy, CMz, SDV_CFx, SDV_CFy, SDV_CFz, SDV_CMx, SDV_CMy, SDV_CMz, Altitude \n')
     for angle_attack in angle_list:
       file.write('AOA {:g}\n'.format(angle_attack))

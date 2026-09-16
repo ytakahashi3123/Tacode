@@ -284,6 +284,8 @@ def write_table(file_output, angle, coefficient):
 
   with open(file_output, 'w') as stream:
     stream.write('Project Fire II aerodynamic data (NASA TN D-4183 figure 4, Mach 35, measured)\n')
+    # Kn 軸を作った代表長さ（読み取り側が config の characteristic_length と突き合わせる）
+    stream.write('# Reference length: {:g} m\n'.format(DIAMETER_REFERENCE))
     stream.write('variables = Kn, CFx, CFy, CFz, CMx, CMy, CMz, '
                  'SDV_CFx, SDV_CFy, SDV_CFz, SDV_CMx, SDV_CMy, SDV_CMz, Altitude \n')
     for index, angle_value in enumerate(angle):
