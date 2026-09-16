@@ -65,7 +65,7 @@ CLAUDE.md
 CLAUDE_ARCHIVE_*.md
 CODE_REVIEW_*.md
 FEASIBILITY_*.md
-HANDOVER_*.md
+HANDOVER*.md
 references/
 
 # Jupyter
