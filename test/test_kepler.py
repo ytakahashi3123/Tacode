@@ -134,5 +134,50 @@ class TestRungeKuttaOrder(unittest.TestCase):
                                'RK4 の次数が出ていない: %.3e -> %.3e' % (coarse, fine))
 
 
+class TestExplicitEulerOrder(unittest.TestCase):
+    """
+    陽的 Euler（time_integration.kind_time_scheme: explicit_euler）が動き、1 次精度であること。
+
+    この枝は tutorial のどの config も使っていないので、ここで回さないと 3 自由度側は
+    一度も実行されない。円軌道では厳密解の半径が一定なので、その膨らみを誤差の代用にする
+    （陽的 Euler はエネルギーを増やすので半径は必ず外へずれる）。
+    """
+
+    @staticmethod
+    def radius_error(timestep):
+        config = circular_orbit_config()
+        config['time_integration']['kind_time_scheme'] = 'explicit_euler'
+        _, position, _ = integrate(config, 2000.0, timestep)
+        radius = np.linalg.norm(position, axis=1)
+        return radius[-1] - radius[0]
+
+    def test_the_orbit_is_computed_at_all(self):
+        config = circular_orbit_config()
+        config['time_integration']['kind_time_scheme'] = 'explicit_euler'
+        iteration, position, velocity = integrate(config, 2000.0, 1.0)
+
+        self.assertEqual(iteration, 2000)
+        self.assertEqual(len(position), iteration + 1)
+        self.assertTrue(np.all(np.isfinite(position)))
+
+        # 1 次でも 2000 秒なら軌道の形は保つ（実測 0.38 %。RK4 は 1e-11 の桁）
+        radius = np.linalg.norm(position, axis=1)
+        self.assertLess(abs(radius[-1] - radius[0])/radius[0], 1.e-2)
+
+    def test_the_error_is_proportional_to_the_timestep(self):
+        error = [self.radius_error(timestep) for timestep in (4.0, 2.0, 1.0)]
+
+        # 陽的 Euler は半径を外へ膨らませる（エネルギーが増える方向）
+        for value in error:
+            self.assertGreater(value, 0.0)
+
+        # 刻みを半分にすると誤差も半分。1 次と 2 次を区別できる幅で見る
+        for coarse, fine in zip(error[:-1], error[1:]):
+            ratio = coarse/fine
+            self.assertGreater(ratio, 1.7, '1 次より悪い: %.3e -> %.3e' % (coarse, fine))
+            self.assertLess(ratio, 2.4, '1 次より良すぎる（RK4 に落ちていないか）: %.3e -> %.3e'
+                            % (coarse, fine))
+
+
 if __name__ == '__main__':
     unittest.main()
