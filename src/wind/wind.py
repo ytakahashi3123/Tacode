@@ -39,7 +39,8 @@
 import sys as sys
 import numpy as np
 import os as os
-import scipy.interpolate
+import scipy.interpolate   # set_interpolator のコメントに残した
+from bisect import bisect_left
 import coordinate_system.coordinate_system as coordinate_system
 import epoch.epoch as epoch_module
 from general.general import get_setting, get_database_directory
@@ -54,6 +55,8 @@ KEY_LATITUDE  = 'Latitude'
 KEY_ALTITUDE  = 'Altitude'
 KEY_WIND      = 'Wind'
 KEY_INTERP    = 'Interpolator'
+KEY_NODE      = 'Node'          # 補間器が持つ軸の節点（Python のリスト）
+KEY_VALUE     = 'Value'         # 補間器が持つ風の値（縮退した軸を落としたもの）
 KEY_AXIS      = 'Axis_active'
 KEY_EPOCH     = 'Epoch'
 KEY_OFFSET    = 'Time_offset'
@@ -370,9 +373,25 @@ def set_interpolator(wind_dict):
     if index not in axis_active :
       values = values.take(0, axis=index)
 
-  wind_dict[KEY_INTERP] = scipy.interpolate.RegularGridInterpolator(
-                            tuple([axis_all[index] for index in axis_active]), values,
-                            method='linear', bounds_error=False, fill_value=None)
+  # 補間器が持つのは軸の節点と値だけで、引くのは evaluate_multilinear。
+  # scipy の RegularGridInterpolator は使わない: 1 点を引くのに 3 次元で 39 us かかり、
+  # 風のテーブルを引くケースでは計算時間の半分を占めていた（手書きは 4 us）。
+  # 空力表（satellite.set_interpolator）と同じ理由で、同じ手を当ててある。
+  #
+  # **値は RGI とビット単位で一致する**（evaluate_multilinear のコメントと
+  # test_wind.TestMultilinearMatchesScipy）。
+  #
+  # 節点を ndarray ではなく Python のリストで持つのは速度のため。理由は同じ関数に書いた。
+  #
+  # 戻すときはここを次の 3 行に替え、get_wind_table の evaluate_multilinear の
+  # 呼び出しを interpolator(np.array([query]))[0] に戻せばよい:
+  #
+  #   wind_dict[KEY_INTERP] = scipy.interpolate.RegularGridInterpolator(
+  #                             tuple([axis_all[index] for index in axis_active]), values,
+  #                             method='linear', bounds_error=False, fill_value=None)
+  #
+  wind_dict[KEY_INTERP] = { KEY_NODE : [axis_all[index].tolist() for index in axis_active],
+                            KEY_VALUE: values }
   wind_dict[KEY_AXIS]   = axis_active
 
   return wind_dict
@@ -509,12 +528,58 @@ def get_wind_table(coordinate_geodetic, wind_dict, time_elapsed=0.0):
     # 節点が 1 つだけの表
     return wind_dict[KEY_WIND][0,0,0,0,:]
 
+  # 軸の端でクランプしてから引く（範囲外の扱いは上記）。素の float に落とすのは
+  # 速度のため。np.float64 のままだと算術 1 つごとに numpy のスカラー経路を通る
+  # （値は変わらない。float() は倍精度の値をそのまま取り出すだけ）
   query = []
   for index in wind_dict[KEY_AXIS]:
     axis = axis_all[index]
-    query.append( min( max( point[index], axis[0] ), axis[-1] ) )
+    query.append( float( min( max( point[index], axis[0] ), axis[-1] ) ) )
 
-  return interpolator(np.array([query]))[0]
+  return evaluate_multilinear(interpolator[KEY_NODE], interpolator[KEY_VALUE], query)
+
+
+def evaluate_multilinear(axis_node, values, point):
+  #
+  # 最大 4 次元（時刻 x 経度 x 緯度 x 高度）の線形補間。軸は昇順、点は軸の内側にある
+  # こと（呼び出し側でクランプ済み）。values の末尾の軸は風の 3 成分。
+  #
+  # scipy.interpolate.RegularGridInterpolator の代わりに手で書いてある。理由と
+  # 戻し方は set_interpolator のコメントを見ること。空力表の
+  # satellite.evaluate_bilinear の N 次元版だが、次元数も末尾の成分数も違うので
+  # 共通化していない（共通化すると、この関数の目的である速さが出ない）。
+  #
+  # **値は RGI とビット単位で一致する。** RGI の _evaluate_linear は超立方体の頂点を
+  # itertools.product の順（**最初の軸が最も外側、各軸は下側の節点が先**）に回り、
+  # **重みを軸の順に左から掛け**、0 から順に足す。ここもそのとおりに書いてある。
+  # 3 次元なら:
+  #
+  #   value = 0 + v[i,j,k]*((1-y0)*(1-y1)*(1-y2)) + v[i,j,k+1]*((1-y0)*(1-y1)*y2)
+  #             + v[i,j+1,k]*((1-y0)*y1*(1-y2))   + ... + v[i+1,j+1,k+1]*(y0*y1*y2)
+  #
+  # 区間の決め方（searchsorted の既定 side='left' から 1 を引き、両端で丸める）も
+  # RGI に合わせてある。まとめ方を変えると最下位桁が動き、バイト一致が崩れる。
+  #
+  # 節点を ndarray ではなく Python のリストで持ち、bisect で引くのは速度のため。
+  # np.searchsorted は 1 点を引くだけでも ndarray を作って返す
+  # （3 次元で 6.7 us -> 4.2 us）。区間の決め方は bisect_left でも同じ。
+  #
+  vertex = [((), 1.0)]
+  for node, coordinate in zip(axis_node, point):
+    index    = min( max(bisect_left(node, coordinate) - 1, 0), len(node) - 2 )
+    distance = (coordinate - node[index])/(node[index+1] - node[index])
+    vertex   = [ (index_vertex + (index_node,), weight*weight_node)
+                 for index_vertex, weight in vertex
+                 for index_node, weight_node in ((index, 1.0 - distance), (index + 1, distance)) ]
+
+  wind_east = wind_north = wind_up = 0.0
+  for index_vertex, weight in vertex:
+    value      = values[index_vertex]
+    wind_east  = wind_east  + value[0]*weight
+    wind_north = wind_north + value[1]*weight
+    wind_up    = wind_up    + value[2]*weight
+
+  return np.array([wind_east, wind_north, wind_up])
 
 
 def get_wind_velocity(config, coordinate, coordinate_geodetic, wind_dict, time_elapsed=0.0):

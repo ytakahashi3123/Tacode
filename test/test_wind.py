@@ -20,6 +20,7 @@ import os
 import unittest
 
 import numpy as np
+import scipy.interpolate
 
 from context import ROOT_DIR, load_config, quiet
 
@@ -1607,6 +1608,79 @@ class TestTheHwm14Source(unittest.TestCase):
         self.assertIn('HWM14 is not available', output)
         self.assertIn('f2py', output)
         self.assertIn('hwm123114.bin', output)
+
+
+class TestMultilinearMatchesScipy(unittest.TestCase):
+    """
+    手書きの多次元線形補間が RegularGridInterpolator とビット一致すること。
+
+    RGI をやめたのは速度のため（3 次元で 1 点 39 us -> 4 us。風のテーブルを読む
+    チュートリアルでは計算時間の半分がそこだった）。速度のためだけの置き換えなので、
+    検査することは「値が動かないこと」だけになる。空力表の
+    test_atmosphere.TestBilinearMatchesScipy と同じ趣旨で、次元数が変わるぶんだけ広い。
+
+    頂点を回る順序・重みの掛ける順序・足し込む順序を RGI の _evaluate_linear に
+    合わせてあるので一致する（まとめ方を変えると最下位桁が動き、チュートリアルと
+    validation の出力がバイト一致しなくなる ── それが高速化の合格条件だった）。
+
+    節点そのものも見る（格子の内側では区間の選び方によらず同じ値になるはずで、
+    そこがずれるのは重みの作り方が違うとき）。
+
+    変異テスト（2026-09-16）: 頂点を回る順序を裏返す・重みの積を右から結合する・
+    軸の対応をずらす、はいずれも落ちる。**区間の選び方を bisect_right に変えても
+    落ちない**が、これは期待どおりで、節点では一方の重みが 1、他方が 0 になって
+    同じ値に行き着く（空力表の evaluate_bilinear と同じ話）。
+    """
+
+    def setUp(self):
+        self.rng = np.random.default_rng(20260916)
+
+    def reference(self, node, values):
+        return scipy.interpolate.RegularGridInterpolator(
+            tuple(np.asarray(axis) for axis in node), values,
+            method='linear', bounds_error=False, fill_value=None)
+
+    def check(self, node, values, query):
+        interpolator = self.reference(node, values)
+        for point in query:
+            np.testing.assert_array_equal(
+                wind.evaluate_multilinear(node, values, point),
+                interpolator(np.array([point]))[0])
+
+    def test_it_matches_on_synthetic_grids(self):
+        # 時刻・経度・緯度・高度の 4 軸まで。軸が 1 本に縮退した表（鉛直プロファイル）
+        # から全部そろった表まで、set_interpolator が作りうる形をすべて通す
+        for size in ((37,), (11, 37), (9, 7, 37), (3, 9, 7, 37)):
+            node = [sorted(float(value) for value in self.rng.uniform(-180.0, 180.0, number))
+                    for number in size]
+            values = self.rng.normal(size=tuple(size) + (3,))
+
+            query = [[float(self.rng.uniform(axis[0], axis[-1])) for axis in node]
+                     for _ in range(300)]
+            # 節点そのもの（軸ごとに別の節点を選ぶ組み合わせも混ぜる）
+            query += [[float(axis[self.rng.integers(len(axis))]) for axis in node]
+                      for _ in range(300)]
+
+            with self.subTest(size=size):
+                self.check(node, values, query)
+
+    def test_it_matches_on_the_shipped_table(self):
+        config = load_config(os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_wind_table',
+                                          'config.yml'))
+        with quiet():
+            wind_dict = wind.initial_settings_wind(config)
+
+        interpolator = wind_dict[wind.KEY_INTERP]
+        node = interpolator[wind.KEY_NODE]
+        values = interpolator[wind.KEY_VALUE]
+        self.assertEqual(len(node), 3, '経度 x 緯度 x 高度の表であること')
+
+        query = [[float(self.rng.uniform(axis[0], axis[-1])) for axis in node]
+                 for _ in range(300)]
+        query += [[float(axis[self.rng.integers(len(axis))]) for axis in node]
+                  for _ in range(300)]
+
+        self.check(node, values, query)
 
 
 if __name__ == '__main__':
