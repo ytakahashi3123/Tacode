@@ -43,9 +43,7 @@ RADIUS_NOSE      = 0.25     # ノーズ半径, m
 ANGLE_CONE_HALF  = 45.0     # 円錐半頂角, deg
 POSITION_CG      = 0.20     # モーメント基準点（底面からの軸方向距離）, m
 
-# 基準量（config.yml の satellite と揃えること）
-AREA_REFERENCE   = np.pi*RADIUS_BASE**2   # 底面積, m2
-LENGTH_REFERENCE = RADIUS_BASE            # 基準長, m
+# 基準量は底面積 pi r_base^2 と底面半径 r_base（config.yml の satellite と揃えること）
 
 # アポロ司令船の形状（NASA TN D-3890 ほか。伝熱面の頂点を原点、x は前方＝伝熱面の外向き）
 CAPSULE_RADIUS_BASE   = 1.9558    # 最大半径（直径 154 in の半分）, m
@@ -66,20 +64,20 @@ NUM_PANEL_MERIDIONAL = 200
 NUM_PANEL_AZIMUTHAL  = 180
 
 
-def profile_spherecone():
+def profile_spherecone(radius_base=RADIUS_BASE, radius_nose=RADIUS_NOSE, angle_cone_half=ANGLE_CONE_HALF):
   #
   # 球円錐の母線 (x, r)。ノーズ先端（x が最大）から底面の縁（x = 0）まで。
   # 戻り値: 母線, 底面を閉じる円板の (半径, x 位置)
   #
-  angle_cone = ANGLE_CONE_HALF*np.pi/180.0
+  angle_cone = angle_cone_half*np.pi/180.0
 
   # 球と円錐の接点（軸からの極角 phi_t = 90 - 円錐半頂角）
   angle_tangent = 0.5*np.pi - angle_cone
-  radius_tangent   = RADIUS_NOSE*np.sin(angle_tangent)
-  position_tangent = (RADIUS_BASE - radius_tangent)/np.tan(angle_cone)
-  position_center  = position_tangent - RADIUS_NOSE*np.cos(angle_tangent)
+  radius_tangent   = radius_nose*np.sin(angle_tangent)
+  position_tangent = (radius_base - radius_tangent)/np.tan(angle_cone)
+  position_center  = position_tangent - radius_nose*np.cos(angle_tangent)
 
-  if position_center + RADIUS_NOSE <= 0.0 :
+  if position_center + radius_nose <= 0.0 :
     print('The geometry is inconsistent. Check the nose radius and the cone angle.')
     sys.exit(1)
 
@@ -88,12 +86,12 @@ def profile_spherecone():
   num_cone   = NUM_PANEL_MERIDIONAL - num_sphere
   for index in range(0, num_sphere+1):
     angle_tmp = angle_tangent*float(index)/float(num_sphere)
-    generator.append([position_center + RADIUS_NOSE*np.cos(angle_tmp), RADIUS_NOSE*np.sin(angle_tmp)])
+    generator.append([position_center + radius_nose*np.cos(angle_tmp), radius_nose*np.sin(angle_tmp)])
   for index in range(1, num_cone+1):
     fact = float(index)/float(num_cone)
-    generator.append([position_tangent*(1.0-fact), radius_tangent + (RADIUS_BASE-radius_tangent)*fact])
+    generator.append([position_tangent*(1.0-fact), radius_tangent + (radius_base-radius_tangent)*fact])
 
-  return np.array(generator), RADIUS_BASE, 0.0
+  return np.array(generator), radius_base, 0.0
 
 
 def profile_capsule():
@@ -251,8 +249,9 @@ def get_coefficient(position, normal, area, angle_attack, knudsen,
   return coefficient_force, coefficient_moment
 
 
-def get_altitude(knudsen_list, length_reference):
+def get_altitude(knudsen_list, length_reference, filename_atmosphere='atmospheremodel.txt'):
   # Kn に対応する高度を大気テーブルから引く（出力の Altitude 列は参考値）
+  # --大気テーブルは database/atmosphere から読む。火星の機体なら火星のテーブルを渡す
   script_directory = os.path.dirname(os.path.realpath(__file__))
   sys.path.insert(0, os.path.join(script_directory, '..', '..', 'src'))
   try:
@@ -262,7 +261,7 @@ def get_altitude(knudsen_list, length_reference):
 
   config = {'satellite'  : {'characteristic_length': length_reference},
             'atmosphere' : {'directory_path_specify': 'default',
-                            'filename_atmosphere'   : 'atmospheremodel.txt',
+                            'filename_atmosphere'   : filename_atmosphere,
                             'kind_extrapolation'    : 'exponential'}}
   atmosphere_dict = atmosphere.initial_settings_atmosphere(config)
 
@@ -282,6 +281,16 @@ def main():
                            ' (default: the shipped value for the shape)')
   parser.add_argument('--angle-step', type=float, default=10.0,
                       help='Step of the angle-of-attack axis [deg.]')
+  # 球円錐の寸法（既定は tutorial/work_reentry_6dof の機体）
+  parser.add_argument('--radius-base', type=float, default=RADIUS_BASE,
+                      help='Sphere-cone: base radius [m], also the reference length')
+  parser.add_argument('--radius-nose', type=float, default=RADIUS_NOSE,
+                      help='Sphere-cone: nose radius [m]')
+  parser.add_argument('--angle-cone', type=float, default=ANGLE_CONE_HALF,
+                      help='Sphere-cone: cone half angle [deg.]')
+  parser.add_argument('--atmosphere', type=str, default='atmospheremodel.txt',
+                      help='Atmosphere table in database/atmosphere used for the reference'
+                           ' Altitude column (use the Mars table for a Mars entry vehicle)')
   args = parser.parse_args()
 
   if args.shape == 'capsule' :
@@ -291,9 +300,10 @@ def main():
     position_reference = 0.0 if args.position_reference is None else args.position_reference
     title = 'Apollo command module aerodynamic data (modified Newtonian + free-molecular, analytic)'
   else :
-    generator, radius_disc, position_disc = profile_spherecone()
-    area_reference     = AREA_REFERENCE
-    length_reference   = LENGTH_REFERENCE
+    generator, radius_disc, position_disc = profile_spherecone(args.radius_base, args.radius_nose,
+                                                              args.angle_cone)
+    area_reference     = np.pi*args.radius_base**2
+    length_reference   = args.radius_base
     position_reference = POSITION_CG if args.position_reference is None else args.position_reference
     title = 'Sphere-cone aerodynamic data (modified Newtonian + free-molecular, analytic sample)'
 
@@ -309,13 +319,23 @@ def main():
   knudsen_list = [1.e-4, 1.e-3, 1.e-2, 1.e-1, 1.e+0, 1.e+1, 1.e+2, 1.e+3, 1.e+4, 1.e+5]
   angle_list   = list(np.arange(0.0, 180.0+args.angle_step, args.angle_step))
 
-  altitude_list = get_altitude(knudsen_list, length_reference)
+  altitude_list = get_altitude(knudsen_list, length_reference, args.atmosphere)
+
+  # 既定と違う寸法の球円錐は、寸法を見出しに残す（既定の表は従来とバイト一致のまま）
+  line_geometry = None
+  if args.shape == 'spherecone' and \
+     (args.radius_base, args.radius_nose, args.angle_cone) != (RADIUS_BASE, RADIUS_NOSE, ANGLE_CONE_HALF) :
+    line_geometry = '# Geometry: base radius {:g} m, nose radius {:g} m, cone half angle {:g} deg,' \
+                    ' moment reference {:g} m ahead of the base'.format(
+                    args.radius_base, args.radius_nose, args.angle_cone, position_reference)
 
   with open(args.output, 'w') as file:
     file.write(title + '\n')
     # Kn 軸を作った代表長さを書いておく。読み取り側（satellite.warn_if_length_differs）が
     # config の characteristic_length と突き合わせる
     file.write('# Reference length: {:g} m\n'.format(length_reference))
+    if line_geometry is not None :
+      file.write(line_geometry + '\n')
     file.write('variables = Kn, CFx, CFy, CFz, CMx, CMy, CMz, SDV_CFx, SDV_CFy, SDV_CFz, SDV_CMx, SDV_CMy, SDV_CMz, Altitude \n')
     for angle_attack in angle_list:
       file.write('AOA {:g}\n'.format(angle_attack))

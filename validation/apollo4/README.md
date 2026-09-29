@@ -127,6 +127,8 @@ from the first row, which at 35 220 ft/s is 2.0 s at -6.9 deg., so the row belon
 
 Measured on 2026-09-11 with `~/venvs/myenv/bin/python` (Python 3.12.3, numpy 2.2.6,
 scipy 1.15.3). The flight table spans 552 s, from 123.5 km down to 37.3 km.
+Rerun on 2026-09-29 after the direction of the J22 term was corrected (see the top-level
+README, Gravity Force): two velocity entries moved by 1 m/s, nothing else in this section.
 
 ### (1) Trajectory
 
@@ -134,9 +136,9 @@ scipy 1.15.3). The flight table spans 552 s, from 123.5 km down to 37.3 km.
 |---|---|---|---|
 | Drag only, whole run | 34 of 45 | max -70.5 km, rms 27.1 km | max -6504 m/s, rms 3445 m/s |
 | Drag only, to the peak heating (72 s) | | max -3.2 km, rms 1.2 km | max -194 m/s, rms 65 m/s |
-| **Measured lift, whole run** | **45 of 45** | max -14.6 km, rms **5.4 km** | max -2085 m/s, rms 788 m/s |
+| **Measured lift, whole run** | **45 of 45** | max -14.6 km, rms **5.4 km** | max -2086 m/s, rms 788 m/s |
 | Measured lift, to the peak heating | | max **+0.5 km**, rms **0.4 km** | max +46 m/s, rms 21 m/s |
-| 6-DOF (constant bank), whole run | 45 of 45 | max -11.8 km, rms 4.7 km | max -1105 m/s, rms 474 m/s |
+| 6-DOF (constant bank), whole run | 45 of 45 | max -11.8 km, rms 4.7 km | max -1105 m/s, rms 475 m/s |
 | 6-DOF, to the peak heating | | max -1.1 km, rms 0.4 km | max +57 m/s, rms 26 m/s |
 
 The drag-only run descends monotonically and reaches the ground at 30 303 s, 725 s before

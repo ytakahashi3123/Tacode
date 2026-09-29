@@ -116,6 +116,55 @@ class TestSingularities(unittest.TestCase):
         self.assertAlmostEqual(geodetic[2], 2.0e5, delta=1.0e-6)
 
 
+class TestBelowTheSurfaceOnTheEquator(unittest.TestCase):
+    """
+    赤道面上 (z=0) で地表より下の点が、緯度 0・負の高度になること。
+
+    B = sign(z) b と書いていた間は z=0 で B=0 になり、地表より下の点が
+    緯度 90 度・高度 +0 と出た。ソルバーは高度 <= 0 で止まるので、赤道から
+    真東に打った再突入は地表で止まらず、時間の上限まで地中を進んだ
+    （2026-09-29、火星のケースの検証で見つけた。地球でも同じ）。
+    """
+
+    def test_the_point_is_below_the_surface(self):
+        for config in (load_config(), {'planet': {'radius': 3396.0e3, 'ellipticity': 0.0}}):
+            radius_equat = config['planet']['radius']
+            for depth in (1.0, 100.0, 5.0e3):
+                for point in ([radius_equat - depth, 0.0, 0.0], [0.0, -(radius_equat - depth), 0.0]):
+                    geodetic = cs.convert_cartesian_geodetic(config, point)
+                    self.assertAlmostEqual(geodetic[1], 0.0, places=12)
+                    self.assertAlmostEqual(geodetic[2], -depth, delta=1.0e-6)
+
+
+class TestASphericalPlanet(unittest.TestCase):
+    """
+    扁平率 0（球）でも変換が壊れないこと。
+
+    火星のチュートリアルは ellipticity: 0.0 で走らせる（大気テーブルの高度が
+    半径 3396 km の球からの高さで与えられているため）。一般式は扁平率で割る形を
+    していないが、三次方程式の解き方が球の極限で退化しないかは確かめておく。
+    球なら測地高度は r - a、測地緯度は地心緯度そのものになる。
+    """
+
+    def setUp(self):
+        self.config = {'planet': {'radius': 3396.0e3, 'ellipticity': 0.0}}
+
+    def test_the_altitude_is_the_distance_above_the_sphere(self):
+        rng = np.random.default_rng(20260929)
+        for _ in range(2000):
+            direction = rng.normal(size=3)
+            direction /= np.linalg.norm(direction)
+            point = direction * rng.uniform(3.39e6, 3.70e6)
+            radius = np.linalg.norm(point)
+
+            geodetic = cs.convert_cartesian_geodetic(self.config, list(point))
+            self.assertAlmostEqual(geodetic[2], radius - 3396.0e3, delta=1.0e-6)
+            self.assertAlmostEqual(geodetic[1], np.arcsin(point[2] / radius), delta=1.0e-12)
+
+            restored = cs.convert_geodetic_cartesian(self.config, geodetic)
+            self.assertLess(np.linalg.norm(np.array(restored) - point), 1.0e-6)
+
+
 class TestPolarAngles(unittest.TestCase):
 
     def setUp(self):

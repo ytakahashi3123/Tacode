@@ -27,6 +27,15 @@ KEY_COEF    = 'Coefficient'
 KEY_FILE    = 'Filename'
 KEY_LENGTH_REF = 'Length_reference'   # 表の Knudsen 数を作った代表長さ（書いていなければ None）
 
+# 3 自由度の CD を Mach 数でも変える表（"MACH <値>" の見出しでブロックを分けた表）。
+# Mach 軸の無い表では KEY_MACH が None で、CD は従来どおり Kn だけで引く
+KEY_MACH        = 'Mach_number'
+KEY_CD_MACH     = 'CD_Mach'            # (Mach, Kn) の CD
+KEY_SOUND_SPEED = 'Sound_speed_factor' # a^2 = (gamma R_u / M) T の係数 gamma R_u / M
+
+# 一般気体定数 J/(mol K)（CODATA 2018 の厳密値）
+CONSTANT_GAS_UNIVERSAL = 8.314462618
+
 # 空力データベースの列数（Kn, CFx..CMz, SDV_CFx..SDV_CMz, Altitude）
 NUM_COLUMN_AERODYNAMIC = 14
 
@@ -51,16 +60,66 @@ def initial_settings_satellite(config):
 
   aerodynamic_dict = read_aerodynamic_file(config)
 
+  section = attitude.get_setting(config, 'attitude', None)
+  flag_attitude = bool( attitude.get_setting(section, 'flag_attitude', False) )
+
+  if aerodynamic_dict[KEY_MACH] is not None :
+    # Mach 軸は 3 自由度の CD にしか入れていない。6 自由度は (迎角, Kn) の格子を引くので、
+    # 表を渡すと Mach 軸が黙って捨てられる
+    if flag_attitude :
+      print('The aerodynamic table has a Mach axis, which only the 3-DOF drag uses.')
+      print('--File:', aerodynamic_dict[KEY_FILE])
+      print('--The 6-DOF coefficients are read over (angle of attack, Kn) and would ignore it.')
+      print('--Use a table without MACH blocks for attitude.flag_attitude: True.')
+      print('Program stopped.')
+      sys.exit(1)
+    aerodynamic_dict[KEY_SOUND_SPEED] = get_sound_speed_factor(config, aerodynamic_dict[KEY_FILE])
+    return aerodynamic_dict
+
   aerodynamic_dict = set_interpolator(aerodynamic_dict)
 
   # 軸対称性の検査は、姿勢を解いていて、かつ係数を表から引くときだけ意味を持つ
   # （3 自由度では表から CFx しか使わず、constant の空力モデルでは表そのものを使わない）
-  section = attitude.get_setting(config, 'attitude', None)
-  if bool( attitude.get_setting(section, 'flag_attitude', False) ) and \
-     config['satellite']['kind_aerodynamic_model'] == 'fileread' :
+  if flag_attitude and config['satellite']['kind_aerodynamic_model'] == 'fileread' :
     warn_if_not_axisymmetric(aerodynamic_dict)
 
   return aerodynamic_dict
+
+
+def get_sound_speed_factor(config, filename_tmp):
+  #
+  # 音速 a = sqrt(gamma R_u T / M) の係数 gamma R_u / M を返す。
+  #
+  # 比熱比と平均分子量は Mach 軸のある表を使うときだけ要るので、そのときだけ読み、
+  # 無ければ止める（既定値を置かない。地球の空気 1.4 / 28.96 と火星の CO2 1.33 / 43.3 では
+  # 音速が 25 % 違い、黙って空気の値で引くと別の Mach の CD を使うことになる）。
+  #
+  # 温度は大気表のものを使うが、比熱比と分子量は定数とする。Mach 数で CD が変わるのは
+  # 連続流の下層で、そこでは大気がよく混ざっていて組成が高度によらないため
+  # （火星では 100 km 以下で平均分子量 43.49、Magalhaes et al. 1999）。
+  #
+  section = config['atmosphere']
+  value = {}
+  for key in ('specific_heat_ratio', 'molecular_weight'):
+    if key not in section :
+      print('The aerodynamic table has a Mach axis, and "{}" is not given in the atmosphere section.'.format(key))
+      print('--File:', filename_tmp)
+      print('--The Mach number is V/a with a = sqrt(specific_heat_ratio R T / molecular_weight),')
+      print('  so both are needed (for example 1.4 and 28.96 for air, 1.335 and 43.49 for Mars).')
+      print('Program stopped.')
+      sys.exit(1)
+    value[key] = float(section[key])
+
+  if value['specific_heat_ratio'] <= 1.0 or value['molecular_weight'] <= 0.0 :
+    print('atmosphere.specific_heat_ratio must be above 1 and molecular_weight (g/mol) positive.')
+    print('--Given:', value['specific_heat_ratio'], value['molecular_weight'])
+    print('Program stopped.')
+    sys.exit(1)
+
+  print('--Mach number with specific heat ratio {:g} and molecular weight {:g} g/mol'.format(
+        value['specific_heat_ratio'], value['molecular_weight']))
+
+  return value['specific_heat_ratio']*CONSTANT_GAS_UNIVERSAL/(value['molecular_weight']*1.e-3)
 
 
 def check_axisymmetry(aerodynamic_dict):
@@ -180,15 +239,16 @@ def read_aerodynamic_file(config):
   filename_tmp = directory_path + '/' + config['satellite']['filename_aerodynamic']
   print('Reading aerodynamic model...:', filename_tmp)
 
-  angle_of_attack, data_block, length_reference = parse_aerodynamic_file(filename_tmp)
+  angle_of_attack, data_block, length_reference, mach_number = parse_aerodynamic_file(filename_tmp)
+  name_block = 'AOA' if mach_number is None else 'MACH'
 
-  # 各ブロックは同じ Knudsen 数の並びでなければ (AOA, Kn) の格子にならない
+  # 各ブロックは同じ Knudsen 数の並びでなければ (AOA, Kn)・(Mach, Kn) の格子にならない
   kn_aero = data_block[0][:,0]
   for index in range(1, len(data_block)):
     if data_block[index].shape != data_block[0].shape or \
        not np.array_equal(data_block[index][:,0], kn_aero) :
-      print('The aerodynamic table has inconsistent Knudsen numbers between the AOA blocks.')
-      print('--Every AOA block must list the same Knudsen numbers in the same order.')
+      print('The aerodynamic table has inconsistent Knudsen numbers between the {} blocks.'.format(name_block))
+      print('--Every {} block must list the same Knudsen numbers in the same order.'.format(name_block))
       print('--File:', filename_tmp)
       print('Program stopped.')
       sys.exit(1)
@@ -203,6 +263,19 @@ def read_aerodynamic_file(config):
   coefficient_moment = np.array([block[:,4:7] for block in data_block])
   alt_aero = data_block[0][:,13]
 
+  warn_if_length_differs(config, filename_tmp, length_reference)
+
+  if mach_number is not None :
+    # Mach 軸のある表。3 自由度の CD を (Mach, Kn) で引く（get_aerodynamic_coefficient_mach）。
+    # 迎角の軸は持たない（6 自由度は initial_settings_satellite が止める）ので、
+    # 迎角・力・モーメントの格子は置かない。置くと 6 自由度の関数が Mach 軸を
+    # 黙って捨てた値を返せてしまう
+    print('--Mach numbers in the table:', ', '.join(['{:g}'.format(value) for value in mach_number]))
+    return {KEY_KN:kn_aero, KEY_CD_MEAN:None, KEY_ALT:alt_aero,
+            KEY_AOA:None, KEY_CF:None, KEY_CM:None,
+            KEY_FILE:filename_tmp, KEY_LENGTH_REF:length_reference,
+            KEY_MACH:mach_number, KEY_CD_MACH:coefficient_force[:,:,0]}
+
   # 3 自由度計算で使う CD は迎角 0 に最も近いブロックの CFx とする
   # （従来の AOA 0 のみのファイルではそのブロックそのもの）。
   #
@@ -215,11 +288,10 @@ def read_aerodynamic_file(config):
 
   print('--Angles of attack in the table (deg.):', ', '.join(['{:g}'.format(value) for value in angle_of_attack]))
 
-  warn_if_length_differs(config, filename_tmp, length_reference)
-
   aerodynamic_dict = {KEY_KN:kn_aero, KEY_CD_MEAN:cfx_mean, KEY_ALT:alt_aero,
                       KEY_AOA:angle_of_attack, KEY_CF:coefficient_force, KEY_CM:coefficient_moment,
-                      KEY_FILE:filename_tmp, KEY_LENGTH_REF:length_reference}
+                      KEY_FILE:filename_tmp, KEY_LENGTH_REF:length_reference,
+                      KEY_MACH:None, KEY_CD_MACH:None}
 
   return aerodynamic_dict
 
@@ -297,13 +369,30 @@ def parse_aerodynamic_file(filename_tmp):
   #
   # "AOA" 行が 1 つも無いファイル（迎角 0 のみの従来形式）もそのまま読める。
   #
+  # "AOA" の代わりに "MACH <値>" でブロックを分けると、3 自由度の CD を Mach 数でも
+  # 変える表になる（各ブロックの CFx が、その Mach 数での CD(Kn)）:
+  #
+  #   MACH 2
+  #   <Kn, CFx, ...>
+  #   MACH 5
+  #   ...
+  #
+  # Mach のブロックは迎角 0 の係数だけを持つ。"AOA" と "MACH" は 1 つの表に混ぜられない
+  # （迎角 × Mach × Kn の 3 次元の表は 6 自由度が要るもので、まだ作っていない）。
+  # Mach の表では、最初の "MACH" 行より前にデータ行を置けない（どの Mach か決まらない）。
+  #
+  # 返り値は (迎角, ブロック, 代表長さ, Mach)。Mach の表でなければ Mach は None、
+  # Mach の表なら迎角は [0]。ブロックは迎角または Mach の昇順に並べてある。
+  #
   with open(filename_tmp) as f:
     lines = f.readlines()
 
   angle_of_attack  = []
+  mach_number      = []
   data_block       = []
   data_current     = None
   length_reference = None
+  flag_implicit    = False   # "AOA" 行の無いまま数値が現れ、迎角 0 のブロックを置いたか
 
   for line in lines:
     words = line.split()
@@ -315,14 +404,28 @@ def parse_aerodynamic_file(filename_tmp):
         length_reference = value
       continue
 
-    # 迎角の見出し行
-    if words[0].upper() == 'AOA' :
+    # 迎角・Mach 数の見出し行
+    if words[0].upper() in ('AOA', 'MACH') :
+      name_header = words[0].upper()
       if len(words) < 2 :
-        print('An "AOA" line in the aerodynamic table has no value.')
+        print('An "{}" line in the aerodynamic table has no value.'.format(name_header))
         print('--File:', filename_tmp)
         print('Program stopped.')
         sys.exit(1)
-      angle_of_attack.append( float(words[1]) )
+      if name_header == 'MACH' and flag_implicit :
+        print('The aerodynamic table has data rows before its first "MACH" line.')
+        print('--File:', filename_tmp)
+        print('Program stopped.')
+        sys.exit(1)
+      header_other = mach_number if name_header == 'AOA' else angle_of_attack
+      if len(header_other) > 0 :
+        print('The aerodynamic table mixes "AOA" and "MACH" blocks.')
+        print('--A table has either angle-of-attack blocks (3-DOF and 6-DOF) or Mach blocks')
+        print('  (the 3-DOF drag only), not both.')
+        print('--File:', filename_tmp)
+        print('Program stopped.')
+        sys.exit(1)
+      (angle_of_attack if name_header == 'AOA' else mach_number).append( float(words[1]) )
       data_current = []
       data_block.append( data_current )
       continue
@@ -339,29 +442,40 @@ def parse_aerodynamic_file(filename_tmp):
     if data_current is None :
       # "AOA" 行が無いまま数値が現れた場合は迎角 0 のブロックとみなす
       angle_of_attack.append( 0.0 )
+      flag_implicit = True
       data_current = []
       data_block.append( data_current )
     data_current.append( values )
 
-  if len(data_block) == 0 or len(data_block[0]) == 0 :
-    print('No data row was found in the aerodynamic table.')
+  if len(data_block) == 0 or any(len(block) == 0 for block in data_block) :
+    print('No data row was found in the aerodynamic table, or a block of it is empty.')
     print('--File:', filename_tmp)
     print('Program stopped.')
     sys.exit(1)
 
-  # 迎角の昇順に並べ替える
-  angle_of_attack = np.array(angle_of_attack)
-  order = np.argsort(angle_of_attack, kind='stable')
-  angle_of_attack = angle_of_attack[order]
+  # 迎角（または Mach 数）の昇順に並べ替える
+  flag_mach = len(mach_number) > 0
+  axis_block = np.array(mach_number if flag_mach else angle_of_attack)
+  order = np.argsort(axis_block, kind='stable')
+  axis_block = axis_block[order]
   data_block = [np.array(data_block[index]) for index in order]
 
-  if len(angle_of_attack) > 1 and np.any(np.diff(angle_of_attack) <= 0.0) :
-    print('The aerodynamic table has duplicated angles of attack.')
+  if len(axis_block) > 1 and np.any(np.diff(axis_block) <= 0.0) :
+    print('The aerodynamic table has duplicated {}.'.format('Mach numbers' if flag_mach else 'angles of attack'))
     print('--File:', filename_tmp)
     print('Program stopped.')
     sys.exit(1)
 
-  return angle_of_attack, data_block, length_reference
+  if flag_mach :
+    if len(axis_block) < 2 :
+      print('The aerodynamic table has a single "MACH" block; a Mach axis needs two or more.')
+      print('--File:', filename_tmp)
+      print('--Leave the MACH line out for a drag that does not depend on the Mach number.')
+      print('Program stopped.')
+      sys.exit(1)
+    return np.array([0.0]), data_block, length_reference, axis_block
+
+  return axis_block, data_block, length_reference, None
 
 
 def get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic):
@@ -374,6 +488,30 @@ def get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic
   # interp1d は SciPy 1.10 以降 legacy で、np.interp が同じ値をビット単位で返す。
 
   return np.interp(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
+
+
+def get_mach_number(speed, temperature, aerodynamic_dict):
+  #
+  # Mach 数 V/a、a = sqrt(gamma R_u T / M)。係数 gamma R_u / M は
+  # initial_settings_satellite が get_sound_speed_factor で作ってある。
+  # 速度は対気速度（風が無ければ ECEF 速度）の大きさ。
+  #
+  return speed/np.sqrt( aerodynamic_dict[KEY_SOUND_SPEED]*temperature )
+
+
+def get_aerodynamic_coefficient_mach(knudsen, mach, aerodynamic_dict):
+  #
+  # Mach 軸のある表から 3 自由度の CD を (Mach, Kn) の双一次で引く。
+  # 表の外側は両方の軸とも端の値でクランプする（Kn だけの CD と同じ扱い）。
+  #
+  mach_table    = aerodynamic_dict[KEY_MACH]
+  knudsen_table = aerodynamic_dict[KEY_KN]
+
+  mach_clamped    = min( max(mach,    mach_table[0]   ), mach_table[-1]    )
+  knudsen_clamped = min( max(knudsen, knudsen_table[0]), knudsen_table[-1] )
+
+  return evaluate_bilinear(mach_table, knudsen_table, aerodynamic_dict[KEY_CD_MACH],
+                           mach_clamped, knudsen_clamped)
 
 
 

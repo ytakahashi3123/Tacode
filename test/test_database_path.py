@@ -28,6 +28,9 @@ from general.general import DIRECTORY_DATABASE, get_database_directory
 # ケースが複製して持つテーブルのうち、マスターと違っていてよいもの（今は無し）
 CASE_TABLE_EXCEPTION = ()
 
+# Mars Climate Database から各自が取得するテーブル（.gitignore 済み）
+PREFIX_TABLE_MCD = 'atmospheremodel_mars'
+
 
 class TestPathResolution(unittest.TestCase):
 
@@ -134,6 +137,10 @@ class TestCaseTablesMatchTheMaster(unittest.TestCase):
         for path in path_list:
             relative = os.path.relpath(path, ROOT_DIR)
             if relative in CASE_TABLE_EXCEPTION:
+                continue
+            # MCD のテーブルはマスターから複製せず、使う人がケースごとに生成器で取得する
+            # （リポジトリには無い）。取得の時期でヘッダの日時が変わるので突き合わせない
+            if os.path.basename(path).startswith(PREFIX_TABLE_MCD):
                 continue
             name_database, name_file = relative.split(os.sep)[-2:]
             path_master = os.path.join(DIRECTORY_DATABASE, name_database, name_file)

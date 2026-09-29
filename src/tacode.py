@@ -2,10 +2,10 @@
 #!/usr/bin/env python3
 
 # Tacode: Trajectory analysis code
-# Version 2.5.3
+# Version 2.6.0
 
 # Author: Yusuke Takahashi, Hokkaido University
-# Date: 2026/09/16
+# Date: 2026/09/29
 
 
 import sys as sys
@@ -67,7 +67,7 @@ def main():
   output_gpsdata.output_routine(config, iteration, coordinate_dict, velocity_dict, time_elapsed_initial)
 
   # Output : Tecplot
-  orb.output_tecplot(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict, epoch_dict, wind_dict, time_elapsed_initial)
+  orb.output_tecplot(config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict, epoch_dict, wind_dict, time_elapsed_initial, aerodynamic_dict)
 
   # Output restart
   orb.output_restart(config, iteration, time_elapsed, coordinate_dict['cartesian'], velocity_dict['cartesian'], attitude_dict, epoch_dict)

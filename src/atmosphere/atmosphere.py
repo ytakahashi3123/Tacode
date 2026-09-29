@@ -25,6 +25,9 @@ KEY_N2     = 'N2'
 KEY_O2     = 'O2'
 KEY_N      = 'N'
 KEY_O      = 'O'
+KEY_CO2    = 'CO2'
+KEY_AR     = 'Ar'
+KEY_CO     = 'CO'
 KEY_Mass_density = 'Mass_density'
 KEY_Temperature_neutral = 'Temperature_neutral'
 
@@ -65,8 +68,19 @@ DICT_FORTRAN_PARAMETER = {
   'TEMPERATURE AT ALT' : (KEY_Temperature_neutral, 'K'),
 }
 
-LIST_MOLECULAR_KIND = [KEY_N2, KEY_O2, KEY_N, KEY_O]
-DICT_DIAMETER_MOLECULAR = {KEY_N2: 3.75e-10, KEY_O2: 3.54e-10, KEY_N: 3.10e-10, KEY_O: 3.04e-10}
+# 平均自由行程を作る分子種と、その剛体球の直径, m
+# --N2 / O2 / N / O は地球（NRLMSISE-00）のテーブルの列。CO2 / Ar / CO は火星
+#   （Mars Climate Database）のテーブルの列で、95 % を CO2 が占める。
+# --火星の 3 種は、N2 の 3.75e-10 と同じ「0 degC の粘性係数から逆算した剛体球の直径」
+#   （Kennard, Kinetic Theory of Gases, 1938 の表）。d^2 = (5/16) sqrt(pi m k T)/(pi mu) で
+#   0 degC の粘性係数から逆算すると N2 は 3.751e-10 m で一致し、CO2 / Ar / CO も 1 % 以内で合う
+#   （O2 の 3.54e-10 だけは同じ逆算の 3.61e-10 から 2 % 外れている。出所は不明）。
+# --テーブルに無い種は和に入らないので、火星の種を足しても地球のテーブルの Kn は
+#   ビット単位で変わらない。**地球の 4 種どうしの並びは変えないこと**（和の順序が変わると
+#   最下位桁が動き、参照出力とのバイト一致が崩れる）
+LIST_MOLECULAR_KIND = [KEY_N2, KEY_O2, KEY_N, KEY_O, KEY_CO2, KEY_AR, KEY_CO]
+DICT_DIAMETER_MOLECULAR = {KEY_N2: 3.75e-10, KEY_O2: 3.54e-10, KEY_N: 3.10e-10, KEY_O: 3.04e-10,
+                           KEY_CO2: 4.59e-10, KEY_AR: 3.64e-10, KEY_CO: 3.76e-10}
 
 
 def initial_settings_atmosphere(config):

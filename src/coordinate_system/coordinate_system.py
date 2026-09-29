@@ -35,6 +35,16 @@ def convert_cartesian_geodetic(config, cartesian_coord):
     altitude  = np.abs( carcoord_z ) - radius_polar_planet
     return [longitude, latitude, altitude]
 
+  # 赤道面上 (z=0) も個別に扱う。下の一般式は B = sign(z) b が 0 になり、地表より上では
+  # それでも緯度 0・高度 p - a を返すが、地表より下では緯度 ±90 度・高度 +0 になる
+  # （B を +b にしても NaN になる）。高度が負にならないので、ソルバーの打ち切りに
+  # 掛からないまま地中を進んでいた。赤道から真東に打つと J2 も自転も軌道を赤道面から
+  # 出さないので、z は厳密に 0 のままになる（2026-09-29、火星のケースの検証で見つけた）。
+  # 赤道面上の点は厳密に緯度 0・高度 p - a で、地表より上では一般式の値とも一致する
+  if carcoord_z == 0.0 :
+    longitude = np.arctan2( carcoord_y, carcoord_x )
+    return [longitude, 0.0, radius_proj - radius_equat_planet]
+
   B_geo_tmp   = np.sign( carcoord_z ) * radius_equat_planet * (1.0 - ellipticity_planet)
   E_geo_tmp   = ( (carcoord_z + B_geo_tmp)*B_geo_tmp/radius_equat_planet - radius_equat_planet )/radius_proj
   F_geo_tmp   = ( (carcoord_z - B_geo_tmp)*B_geo_tmp/radius_equat_planet + radius_equat_planet )/radius_proj

@@ -3,7 +3,9 @@
 `satellite.filename_aerodynamic` in `config.yml` selects the file. The 3-DOF
 computation only reads the drag coefficient (`CFx` at the smallest angle of attack in
 the table); the 6-DOF computation reads the whole set of force and moment coefficients
-and interpolates them in the angle of attack as well.
+and interpolates them in the angle of attack as well. A table split into **Mach blocks**
+instead of angle-of-attack blocks gives the 3-DOF drag as a function of the Mach number
+and the Knudsen number (see [Mach number](#mach-number)).
 
 | File | Angles of attack | Knudsen range | Reference length | Source |
 |---|---|---|---|---|
@@ -11,6 +13,8 @@ and interpolates them in the angle of attack as well.
 | `aerodynamic_spherecone_aoa.txt` | 0–180°, every 10° | 1e-4 – 1e5 | 0.5 m | analytic sphere-cone model, see below |
 | `aerodynamic_apollo_aoa.txt` | 0–180°, every 5° | 1e-4 – 1e5 | 3.9116 m | the same model over the Apollo command module, see below |
 | `aerodynamic_fire2.txt` | 0–180°, every 5° | 1e-4 – 1e5 | 0.672 m | NASA TN D-4183 figure 4, for `validation/fire2` |
+| `aerodynamic_mars_spherecone70.txt` | 0–180°, every 10° | 1e-4 – 1e5 | 1.325 m | the analytic model over a 70° sphere-cone, for `tutorial/work_reentry_mars`, see below |
+| `aerodynamic_pathfinder.txt` | 0° only; **29 Mach blocks, Mach 1.8–43** | 1e-7 – 1e4 | 1.325 m | the drag coefficient of the Mars Pathfinder flight, traced back from the measured acceleration by `validation/pathfinder/convert_pds.py` |
 
 `aerodynamic.txt` is the default used by `tutorial/work`, `tutorial/work_reentry` and
 `tutorial/template`, and it is what the committed reference outputs were produced with.
@@ -51,6 +55,51 @@ AOA 10
   the Knudsen number.
 * `# Reference length:` is optional and names the length the Knudsen axis was built
   with, in metres. See below.
+* A line whose first word is `MACH` starts a Mach block instead; see below.
+
+## Mach number
+
+```
+<header lines>
+# Reference length: 1.325 m
+MACH 2
+<14 numbers per row, one row per Knudsen number: CFx is the CD at Mach 2>
+MACH 5
+<the same Knudsen numbers, in the same order>
+...
+```
+
+A table of `MACH` blocks gives the **3-DOF drag coefficient as a function of the Mach
+number and the Knudsen number**: `CFx` of the block, bilinear in (Mach, Kn) and clamped
+to the edge in both. Only `CFx` is read; the other columns are there to keep the row
+format.
+
+* The Mach number is `V/a` with the air-relative speed and `a = sqrt(γ R T/M)`, `T` the
+  temperature of the atmosphere table at each Runge-Kutta stage. **`γ` and `M` are
+  required** in the `atmosphere` section of `config.yml` when the table has a Mach axis,
+  and the run stops without them:
+
+  ```yaml
+  atmosphere:
+    specific_heat_ratio: 1.335   # gamma
+    molecular_weight: 43.49      # M, g/mol
+  ```
+
+  They are constants: the Mach number matters in the well-mixed lower atmosphere, where
+  the composition does not change with height. There is no default, because air
+  (1.4, 28.96) and the CO2 of Mars (1.33, 43.3) give speeds of sound 25 % apart.
+* The output gets a `Mach` column after `Kn`, only when the table has a Mach axis.
+* A Mach table has no angle-of-attack axis: `AOA` and `MACH` lines cannot be mixed, and
+  **a 6-DOF run stops** when given one (the 6-DOF coefficients are read over the angle of
+  attack and the Knudsen number, and would drop the Mach axis). It needs at least two
+  blocks, and no data row before the first `MACH` line.
+* A table without `MACH` lines is read exactly as before, and the drag, the output and
+  the results do not change by a single byte.
+
+`test_aerodynamic_mach.py` checks the reading, the interpolation, the speed of sound
+against the standard atmosphere, the identity "a table with the same CD at every Mach
+number gives the trajectory of the Knudsen-only table", and that each Runge-Kutta stage
+uses its own Mach number (the scheme stays fourth order).
 
 ## Reference length
 
@@ -192,3 +241,46 @@ The drag is within 2 %; the lift-to-drag ratio is 24 % high, which is what modif
 Newtonian usually does on a blunt body — it puts no base pressure and no viscous force on
 the afterbody. The consequence for the trajectory is worked out in
 `validation/apollo4/README.md`.
+
+## `aerodynamic_mars_spherecone70.txt`
+
+The sphere-cone model again, over the 70° body of the Viking and Pathfinder class, for
+the Mars tutorial:
+
+```
+python3 generate_aerodynamic_table.py --radius-base 1.325 --radius-nose 0.6625 --angle-cone 70 \
+        --position-reference 0.20 --atmosphere atmospheremodel_mars.txt \
+        -o aerodynamic_mars_spherecone70.txt
+```
+
+2.65 m base diameter, a nose radius half the base radius, the base closed by a flat disc
+(no backshell). The reference area and length are π · 1.325² m² and 1.325 m. The
+`--atmosphere` option only feeds the `Altitude` column, which is for reference and is not
+read by the solver; here it is the Mars table, so that the column means the height at
+which a 1.325 m body sees that Knudsen number at Mars. That table is not in the repository
+(see `database/atmosphere/README.md`); to regenerate this file, fetch it into
+`database/atmosphere/` first. A table with a geometry other than
+the default gets a `# Geometry:` header line; the default sphere-cone table and the Apollo
+table regenerate byte for byte as before.
+
+The continuum drag coefficient at zero incidence is 1.627 and the free-molecular one 2.000.
+**The model has no Mach number in it**: it is the hypersonic limit, with
+`Cp_max = 1.839` (ratio of specific heats 1.4). The limitations of using it at Mars are
+listed in the [Entry at Mars](../../README.md#entry-at-mars) section of the top-level README.
+
+
+## `aerodynamic_pathfinder.txt`
+
+The drag coefficient of the Mars Pathfinder entry (1997-07-04), for `validation/pathfinder`.
+It is **not a model**: it is the drag coefficient the NASA reconstruction of the flight
+used (the preflight database of Braun et al. 1995, which is not published as numbers),
+traced back along the path the vehicle flew as `CD = 2 m a/(ρ A V²)` from the measured
+acceleration and the reconstructed density of the PDS archive. It is written by
+`validation/pathfinder/convert_pds.py` in the separable form
+`CD(Mach, Kn) = CD_c(Mach) + ΔCD(Kn)`: in that flight the Knudsen number moves the drag
+only above 62 km, at Mach 41–48, and the Mach number only below it, in the continuum, so
+the two parts are read off different stretches of the flight. The grid away from the
+flown path (low Mach and large Knudsen number together) is that form extended, not data,
+and above `Kn = 0.05` (77 km, where the acceleration is too small to read) the increment
+is bridged to the free-molecular 2.000 of the table above. How it was made and how well it
+reproduces the flight are in `validation/pathfinder/README.md`.

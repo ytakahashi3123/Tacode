@@ -110,9 +110,13 @@ def acceleration_routine(config, coordinate, velocity, mass_satellite, area_sate
   J22 = potential_factor['J22']
   J3  = potential_factor['J3']
   J4  = potential_factor['J4']
+  # Lambda22 は赤道の長軸の経度（Wagner, NASA TN D-3317 式 99 と図 4）。J22 の項は cos 2(lon - Lambda22) で、
+  # C22 cos 2lon + S22 sin 2lon = -J22 cos 2(lon - Lambda22)（J22 < 0）。
+  # 2026-09-29 まで cos 2(lon + Lambda22) と書いていて、地球の長軸が西経 14.5 度ではなく
+  # 東経 14.5 度に来ていた（S22 の符号が逆）
   labd22           = potential_factor['Lambda22']*orbital.deg2rad
-  sin_2labd_labd22 = np.sin( 2.0*(angle_long + labd22 ) )
-  cos_2labd_labd22 = np.cos( 2.0*(angle_long + labd22 ) )
+  sin_2labd_labd22 = np.sin( 2.0*(angle_long - labd22 ) )
+  cos_2labd_labd22 = np.cos( 2.0*(angle_long - labd22 ) )
 
   acceleration_g_r = gme_by_radius2 * (- 1.0                                                                           \
                                        + 1.5    *radius_by_coord**2*J2  *( 3.0*sin_beta**2 -  1.0 )                    \

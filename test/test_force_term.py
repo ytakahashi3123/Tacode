@@ -52,7 +52,7 @@ def potential(config, coord):
 
     bracket = 1.0
     bracket -= ratio ** 2 * factor['J2'] * (3.0 * sin_b ** 2 - 1.0) / 2.0
-    bracket -= ratio ** 2 * factor['J22'] * 3.0 * cos_b ** 2 * np.cos(2.0 * (alpha + alpha22))
+    bracket -= ratio ** 2 * factor['J22'] * 3.0 * cos_b ** 2 * np.cos(2.0 * (alpha - alpha22))
     bracket -= ratio ** 3 * factor['J3'] * (5.0 * sin_b ** 3 - 3.0 * sin_b) / 2.0
     bracket -= ratio ** 4 * factor['J4'] * (35.0 * sin_b ** 4 - 30.0 * sin_b ** 2 + 3.0) / 8.0
 
@@ -137,6 +137,139 @@ class TestGravityMatchesPotential(unittest.TestCase):
 
         self.assertGreater(self.config['planet']['potential_factor']['J2'], 0.0)
         self.assertGreater(np.linalg.norm(equator), np.linalg.norm(pole))
+
+
+class TestTheEarthJ22PointsTheRightWay(unittest.TestCase):
+    """
+    地球の J22 の長軸が西経 14.5 度にあること（EGM96 は西経 14.93 度）。
+
+    README が挙げる Wagner（NASA TN D-3317 式 99、TN D-3557 付録 B）は cos 2(lon - Lambda22)
+    で、Lambda22 は赤道の長軸の経度（J22 < 0）。
+    2026-09-29 まで、コードと README は J22 の項を cos 2(lon + Lambda22) と書いていた。
+    出典の J22 = -1.81222e-6, Lambda22 = -14.545 度をこれに入れると長軸は東経 14.5 度に
+    来る（S22 の符号が逆）。TestGravityMatchesPotential は README の式とコードの一致しか
+    見ないので、両方が同じ向きに間違っていると通ってしまう。そこで、コードの重力から
+    C22 / S22 を逆算して、独立な重力場モデル（EGM96）と比べる。
+
+    赤道上の重力の東向き成分は、帯状項（J2 / J3 / J4）からは出ず、
+        g_east = 6 GM/r^2 (a/r)^2 (S22 cos 2lon - C22 sin 2lon)
+    だけになる（C22, S22 は正規化していない係数）。
+    """
+
+    # EGM96 の完全正規化係数
+    C22_NORMALISED = 0.243914352398e-5
+    S22_NORMALISED = -0.140016683654e-5
+
+    def test_the_long_axis_and_the_amplitude_match_egm96(self):
+        config = load_config()
+        gm = gravitational_parameter(config)
+        radius_equat = config['planet']['radius']
+        radius = radius_equat + 200.0e3
+
+        longitude = np.linspace(-np.pi, np.pi, 72, endpoint=False)
+        east = []
+        for lon in longitude:
+            coord = radius * np.array([np.cos(lon), np.sin(lon), 0.0])
+            east.append(np.dot(gravity_from_code(config, coord), [-np.sin(lon), np.cos(lon), 0.0]))
+        scale = 6.0 * gm / radius ** 2 * (radius_equat / radius) ** 2
+        design = np.stack([np.cos(2.0 * longitude), -np.sin(2.0 * longitude)], axis=1) * scale
+        s22, c22 = np.linalg.lstsq(design, np.array(east), rcond=None)[0]
+
+        factor = np.sqrt(5.0 / 12.0)
+        c22_model, s22_model = self.C22_NORMALISED * factor, self.S22_NORMALISED * factor
+        axis = 0.5 * np.degrees(np.arctan2(s22, c22))
+        axis_model = 0.5 * np.degrees(np.arctan2(s22_model, c22_model))
+
+        # 出典の値は EGM96 から長軸で 0.39 度、振幅で 0.18 % ずれている（古い重力場）。
+        # 符号を取り違えると長軸は東経 14.5 度に来て、29 度ずれる
+        self.assertAlmostEqual(axis, -14.545, delta=1.0e-6)
+        self.assertAlmostEqual(axis, axis_model, delta=0.5)
+        self.assertAlmostEqual(np.hypot(c22, s22) / np.hypot(c22_model, s22_model), 1.0, delta=0.005)
+
+
+class TestMarsGravityMatchesTheFieldModel(unittest.TestCase):
+    """
+    火星のチュートリアルの planet 節が、元の重力場モデルを再現すること。
+
+    config の J2 / J22 / J3 / J4 / Lambda22 は JGMRO_120F（PDS の MRO 電波科学、
+    基準半径 3396.0 km）の**完全正規化**係数を README の形に換算したもの。
+    換算（正規化の係数、J_n = -C_n0 の符号、C22/S22 から J22/Lambda22 への角度）の
+    どれかを取り違えると、コードが解く重力は元のモデルと食い違う。
+
+    ここでは換算を経ずに、正規化係数のまま標準形のポテンシャル
+
+        V = GM/r [ 1 + sum (R/r)^n Pbar_nm(sin lat) (Cbar_nm cos m lon + Sbar_nm sin m lon) ]
+
+    を書き、その勾配とコードの重力を比べる。点質量の分を引いてから比べるので、
+    主項の 1e-5 倍しかない C22/S22 の取り違えも見える。
+    """
+
+    CONFIG = os.path.join(ROOT_DIR, 'tutorial', 'work_reentry_mars', 'config.yml')
+
+    # JGMRO_120F_SHA.TAB の先頭（完全正規化）と、ラベルにある火星単体の GM
+    GM = 42828.3748574e9
+    RADIUS = 3396.0e3
+    C20 = -0.8750219819894000e-03
+    C22 = -0.8463283575906001e-04
+    S22 = 0.4893975901192000e-04
+    C30 = -0.1189685487260000e-04
+    C40 = 0.5129215056400000e-05
+
+    def setUp(self):
+        self.config = load_config(self.CONFIG)
+
+    def potential_model(self, coord):
+        x, y, z = coord
+        r = np.sqrt(x * x + y * y + z * z)
+        s = z / r
+        c = np.sqrt(x * x + y * y) / r
+        lon = np.arctan2(y, x)
+        ratio = self.RADIUS / r
+        # 完全正規化されたルジャンドル陪関数
+        p20 = np.sqrt(5.0) * (3.0 * s ** 2 - 1.0) / 2.0
+        p30 = np.sqrt(7.0) * (5.0 * s ** 3 - 3.0 * s) / 2.0
+        p40 = 3.0 * (35.0 * s ** 4 - 30.0 * s ** 2 + 3.0) / 8.0
+        p22 = np.sqrt(5.0 / 12.0) * 3.0 * c ** 2
+        bracket = (1.0
+                   + ratio ** 2 * p20 * self.C20
+                   + ratio ** 2 * p22 * (self.C22 * np.cos(2.0 * lon) + self.S22 * np.sin(2.0 * lon))
+                   + ratio ** 3 * p30 * self.C30
+                   + ratio ** 4 * p40 * self.C40)
+        return self.GM / r * bracket
+
+    def gradient_model(self, coord, step=100.0):
+        grad = np.zeros(3)
+        for i in range(3):
+            def shifted(delta):
+                point = np.array(coord, dtype=float)
+                point[i] += delta
+                return self.potential_model(point)
+            grad[i] = (-shifted(2.0 * step) + 8.0 * shifted(step)
+                       - 8.0 * shifted(-step) + shifted(-2.0 * step)) / (12.0 * step)
+        return grad
+
+    def test_the_mass_times_the_constant_is_the_gm_of_mars(self):
+        self.assertAlmostEqual(gravitational_parameter(self.config) / self.GM, 1.0, delta=1.0e-7)
+        self.assertEqual(self.config['planet']['radius'], self.RADIUS)
+
+    def test_the_gravity_is_the_gradient_of_the_field_model(self):
+        rng = np.random.default_rng(20260929)
+        for _ in range(12):
+            lon = rng.uniform(-np.pi, np.pi)
+            lat = rng.uniform(-1.4, 1.4)
+            r = self.RADIUS + rng.uniform(0.0, 200.0e3)
+            coord = r * np.array([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
+
+            # 点質量の分はそれぞれの GM で引く（config の質量は 8 桁に丸めてあり、
+            # 共通の GM で引くと丸めの 1.5e-9 が主項の 1e-3 倍の差を 6e-7 だけ汚す）
+            expected = self.gradient_model(coord) + self.GM / r ** 3 * coord
+            obtained = gravity_from_code(self.config, coord) \
+                + gravitational_parameter(self.config) / r ** 3 * coord
+            # 2026-09-29 の実測: 出荷値で相対 1e-8 の桁。Lambda22 を 1 度ずらすと 6e-3、
+            # J2 を 0.1 % 変えると 1e-3、J22 / J3 / J4 の符号を反転すると 0.02 以上
+            np.testing.assert_allclose(
+                obtained, expected, rtol=0.0, atol=1.0e-5 * np.linalg.norm(expected),
+                err_msg='火星の重力が JGMRO_120F と一致しない: lon=%.3f lat=%.3f' % (lon, lat))
 
 
 class TestInertialAndAeroTerms(unittest.TestCase):

@@ -21,6 +21,8 @@ Since v2.4.0 the **wind** can be taken into account, so that the atmosphere no l
 
 Since v2.5.0 the three-degree-of-freedom motion can **fly a lift force**: `satellite.lift_coefficient` with either a constant `satellite.bank_angle` or a `satellite.bank_angle_table` of bank angle against time, each Runge-Kutta stage reading the table at its own time. That is what makes an entry with a measured roll history reproducible, and `validation/` compares two such entries — Apollo 4 and Apollo 10 — with their flight data. The run is also guarded now: a solution which leaves the physical range stops with a non-zero exit code instead of writing a diverged trajectory, every error path returns a non-zero code, a Monte-Carlo case which does not complete is reported rather than dropped, and `montecarlo.random_seed` makes a Monte-Carlo set reproducible. A configuration written for an earlier version reproduces its results bit for bit, as before.
 
+Since v2.6.0 Tacode **flies at Mars** (`tutorial/work_reentry_mars`, with a generator that fetches the atmosphere from the Mars Climate Database), the aerodynamic table can give the three-degree-of-freedom **drag coefficient as a function of the Mach number** as well as the Knudsen number, and `validation/pathfinder` puts the solver against the Mars Pathfinder entry. **This version changes the results of every Earth case**, unlike the ones before it: the J22 term of the gravity used `cos 2(lon + Lambda22)` where the source it cites has `cos 2(lon - Lambda22)`, which put the long axis of the equator at 14.5 deg. East instead of West (see [Gravity Force](#gravity-force)). The corrected term moves the landing point of `tutorial/work_reentry` by 5.4 km and the others by less; the reference outputs have been regenerated. A point exactly on the equatorial plane below the surface is now converted correctly, which the old conversion put at latitude 90 deg. and altitude +0. A table without a Mach axis is read as before.
+
 ![Atmospheric-entry trajectories for initial velocities of 7250, 7450, and 7650 m/s](figure/trajectory.jpg)
 
 The trajectories above were written to `geodetic.kml` by the KML output and rendered
@@ -91,7 +93,7 @@ Because the Earth is a spheroid shape where the radii at the equator and the pol
 	U = - \frac{G M}{r} 
 	\left[ 1
 	- \left( \frac{a_{e}}{r} \right)^2 J_{20} \frac{ 3 \sin^2 \beta - 1}{2} 
-	- \left( \frac{a_{e}}{r} \right)^2 J_{22} 3 \cos^2 \beta \cos 2 \left( \alpha + \alpha_{22} \right) 
+	- \left( \frac{a_{e}}{r} \right)^2 J_{22} 3 \cos^2 \beta \cos 2 \left( \alpha - \alpha_{22} \right) 
 	- \left( \frac{a_{e}}{r} \right)^3 J_{30} \frac{ 5 \sin^3 \beta - 3 \sin \beta}{2}  
 	- \left( \frac{a_{e}}{r} \right)^4 J_{40} \frac{1}{8} \left( 35 \sin^4 \beta - 30 \sin^2 \beta + 3 \right) \right] .
 ```
@@ -99,6 +101,18 @@ Because the Earth is a spheroid shape where the radii at the equator and the pol
 Here, $G$ is the universal gravitational constant, $M$ is the planetary mass, and $r$ represents the radial distance. 
 For Earth, $`G=6.67408\times10^{-11}`$ $`{\rm m}^3`$/{kg$`\cdot`$s$`^2`$} and $M=5.9722\times10^{24}$ kg are given.
 In addition, $a_e$ represents the planet's equatorial radius, while $J_{20}$, $J_{22}$, $J_{30}$, $J_{40}$, and $\alpha_{22}$ are the dynamic form factors associated with the planet's shape given by the reference [@liu2019guidance]. 
+$\alpha_{22}$ is the longitude of the long axis of the equator: with the values of that reference,
+$J_{22} = -1.81222\times10^{-6}$ and $\alpha_{22} = -14.545^\circ$, the term equals
+$3 (a_e/r)^2 \cos^2\beta \, (C_{22} \cos 2\alpha + S_{22} \sin 2\alpha)$ with
+$C_{22} = -J_{22} \cos 2\alpha_{22}$ and $S_{22} = -J_{22} \sin 2\alpha_{22}$, which is the Earth's
+equator elongated towards 14.5° W (EGM96 puts it at 14.93° W with an amplitude 0.18 % larger).
+This is the form of [@CWagner1966] (NASA TN D-3317, Eq. 99), where $J_{22}$ is negative and
+$\lambda_{22}$ is "the geographical longitude of the principal plane of longitudinal symmetry",
+the major equatorial axis of its Figure 4; the gravity components below follow its force
+field term by term. Wagner's own values from the drift of three synchronous satellites are
+$J_{22} = -(1.816 \pm 0.020)\times10^{-6}$ and $\lambda_{22} = -(15.4 \pm 0.3)^\circ$ (NASA TN D-3557, 1966).
+Until 2026-09 the code and this section read $\cos 2(\alpha + \alpha_{22})$, which put the axis at 14.5° E.
+
 By taking partial derivatives of this potential with respect to each coordinate components, the gravity in the polar coordinate system, denoted as $`\boldsymbol{F}_{grav}^{'}=(F_{g_r}^{'}, F_{g_{\alpha}}^{'}, F_{g_{\beta}}^{'})`$, are expressed as follows.
 
 $$
@@ -108,20 +122,20 @@ $$
 	\left[ 
 	- 1
 	+ \frac{3}{2} \left( \frac{a_{e}}{r} \right)^2 J_{20} \left( 3 \sin^2 \beta - 1 \right)
-	+ 9 \left( \frac{a_{e}}{r} \right)^2 J_{22} \left( \cos^2 \beta \right) \cos 2 \left( \alpha + \alpha_{22} \right)
+	+ 9 \left( \frac{a_{e}}{r} \right)^2 J_{22} \left( \cos^2 \beta \right) \cos 2 \left( \alpha - \alpha_{22} \right)
 	+ 2 \left( \frac{a_{e}}{r} \right)^3 J_{30} \left( 5 \sin^3 \beta - 3 \sin \beta \right)
 	+ \frac{5}{8} \left( \frac{a_{e}}{r} \right)^4 J_{40} \left( 35 \sin^4 \beta -30 \sin^2 \beta + 3  \right)
 	\right] , \\
 	F_{g_{\alpha}}^{'} 
 	=& \frac{GMm}{r^2} 
 	\left[ 
-	6 \left( \frac{a_{e}}{r} \right)^2 J_{22}  \cos \beta \sin 2 \left( \alpha + \alpha_{22} \right)
+	6 \left( \frac{a_{e}}{r} \right)^2 J_{22}  \cos \beta \sin 2 \left( \alpha - \alpha_{22} \right)
 	\right] , \\
 	F_{g_{\beta}}^{'} 
 	=& \frac{GMm}{r^2} 
 	\left[ 
 	- 3 \left( \frac{a_{e}}{r} \right)^2 J_{20} \left( \sin \beta \cos \beta \right)
-	+ 6 \left( \frac{a_{e}}{r} \right)^2 J_{22} \left( \sin \beta \cos \beta \right) \cos 2 \left( \alpha + \alpha_{22} \right)
+	+ 6 \left( \frac{a_{e}}{r} \right)^2 J_{22} \left( \sin \beta \cos \beta \right) \cos 2 \left( \alpha - \alpha_{22} \right)
 	-  \frac{3}{2} \left( \frac{a_{e}}{r} \right)^3 J_{30} \left( 5 \sin^2 \beta - 1 \right) \cos \beta
 	- \frac{5}{2} \left( \frac{a_{e}}{r} \right)^4 J_{40} \left( 7 \sin^2 \beta - 3 \right) \sin \beta \cos \beta
 	\right] .
@@ -153,7 +167,13 @@ be a drag along the direction of motion:
 
 where $C_D$ is the drag coefficient and $S$ is the characteristic (projected) area. The
 drag coefficient is either a constant or interpolated from the aerodynamic table against
-the Knudsen number.
+the Knudsen number, or, when the table is split into `MACH` blocks, against the Mach number
+and the Knudsen number together. The Mach number is the air-relative speed over
+$a = \sqrt{\gamma R T / M}$, with $T$ from the atmosphere table at each Runge-Kutta stage
+and $\gamma$, $M$ given as `atmosphere.specific_heat_ratio` and `atmosphere.molecular_weight`
+(required with such a table, and read only then); the output then gains a `Mach` column.
+A table without `MACH` blocks is read exactly as before. The format is in
+`database/aerodynamic/README.md`.
 
 A **lift** may be added to it, which is what a blunt lifting body such as a re-entry capsule
 flies with. It is perpendicular to the velocity, and its direction in that plane is set by
@@ -416,6 +436,7 @@ Tutorial cases:
 | `tutorial/work_montecarlo` | several cases run in parallel |
 | `tutorial/work_montecarlo_wind` | the same entry with the wind switched on, scattered case by case |
 | `tutorial/work_reentry_wind_table` | the same entry flown through a real wind table (NCEP + HWM14) |
+| `tutorial/work_reentry_mars` | a ballistic entry **at Mars**: 70° sphere-cone, 6000 m/s from 125 km (see [Entry at Mars](#entry-at-mars)) |
 
 `tutorial/template` is the template used to create a new case (copy it to a new
 directory), and `tutorial/template_wind` is the one the wind Monte-Carlo tutorial
@@ -461,6 +482,89 @@ Output is written to the directories named in `config.yml`:
 | `output_result` | `tecplot.dat` | Trajectory in Tecplot point format |
 | `output_result` | `geodetic.kml` | Ground track for Google Earth |
 | `output_restart` | `restart.dat` | State in ECEF Cartesian coordinates |
+
+## Entry at Mars
+
+```console
+cd tutorial/work_reentry_mars
+python3 ../../database/atmosphere/generate_atmosphere_table_mars.py --latitude 19.13 \
+        --longitude -33.22 --ls 142.7 --local-time 3.0 --altitude 0 200 \
+        -o database/atmosphere/atmospheremodel_mars.txt     # once; about a minute, network required
+./run_tacode.sh
+```
+
+**The Mars atmosphere table is not in this repository.** It is Mars Climate Database
+(MCD) data, and Tacode does not redistribute it: each user fetches it from the MCD web
+interface with the script above, under the
+[MCD terms](https://www-mars.lmd.jussieu.fr/mars/access.html) — scientific use is free
+provided the origin of the data is quoted and the MCD team is kept informed; commercial
+use needs their authorization. `run_tacode.sh` stops and prints the command when the
+table is missing. For the same reason the tutorial has no committed reference output.
+
+Nothing in the solver is tied to the Earth: the gravitational constant and mass, the
+equatorial radius and flattening, the rotation rate and the J terms are all read from the
+`planet` section of `config.yml`. A Mars case changes that section and the two tables.
+
+| | Earth tutorials | `tutorial/work_reentry_mars` |
+|---|---|---|
+| gravity | J2, J22, J3, J4 of [@liu2019guidance] | JGMRO_120F (MRO radio science, PDS `mro-m-rss-5-sdp-v1`), reference radius 3396.0 km, GM of Mars alone 42828.3748574 km³/s² |
+| figure | WGS84 ellipsoid | **a sphere of 3396.0 km** (`ellipticity: 0.0`) |
+| rotation | 7.292115e-5 rad/s | 7.0882181e-5 rad/s (IAU 2015, 350.89198226°/day) |
+| atmosphere | NRLMSISE-00 | Mars Climate Database v6.2, web interface |
+| vehicle | 1 m sphere-cone, 10 kg | 70° sphere-cone, 2.65 m base diameter, nose radius half the base radius, 585 kg |
+
+**The sphere is deliberate.** The Mars Climate Database gives its profile as the height
+above the 3396 km sphere, and Tacode's altitude is the height above the figure in the
+`planet` section; with `ellipticity: 0.0` the two are the same quantity, and the latitude
+is planetocentric, which is the convention for Mars. The IAU ellipsoid (flattening 1/170)
+would have put the table up to 20 km off at the poles. The run stops at altitude 0, that
+is at the sphere, **not at the local surface**; the topography is not modelled.
+
+The J terms are the fully normalised coefficients of JGMRO_120F converted to the form of
+[Gravity Force](#gravity-force): `J_n = -C_n0 sqrt(2n+1)`, `J22 = -sqrt(C22² + S22²)` and
+`Lambda22 = ½ atan2(S22, C22)`, so that `-J22 cos 2(lon - Lambda22)` reproduces
+`C22 cos 2 lon + S22 sin 2 lon` (unnormalised). The
+conversion is checked by `test_force_term.py`, which writes the potential with the
+normalised coefficients themselves and compares its gradient with the gravity the solver
+computes (they agree to 2e-8 of the non-central part).
+
+The atmosphere table `atmospheremodel_mars.txt` fetched above is one profile at
+the Mars Pathfinder landing site (19.13°N, 326.78°E) at Ls 142.7° and 03:00 local true
+solar time, the climatology scenario with average solar EUV, 0–200 km every 1 km. It
+is written by `database/atmosphere/generate_atmosphere_table_mars.py` (standard library
+only; see `database/atmosphere/README.md`). It carries the MCD terms in its header, and
+they, not Tacode's MIT license, govern it. The table carries CO2,
+N2, Ar, CO, O and O2, and **the Knudsen number is built from all six**: with the Earth's
+four species alone it would pick up only the 2.8 % of N2 and come out 35–53 times too
+large below 100 km.
+
+The aerodynamic table `database/aerodynamic/aerodynamic_mars_spherecone70.txt` is the same
+analytic panel model as the other sphere-cone table, over the 70° body (continuum CD 1.627,
+free-molecular 2.000).
+
+What the tutorial gives (2026-09-29, with the table fetched that day; MCD v6.2): peak deceleration 65.7 m/s² (6.7 g₀) at 31 km,
+118.5 s after entry, peak dynamic pressure 4.3 kPa; the vehicle reaches the sphere at
+286.5 s and 270 m/s, 872 km downrange. The time step is 0.5 s: the landing point moves
+0.47 m from 1.0 s to 0.5 s and 3 cm from 0.5 s to 0.025 s. With the rotation and the J
+terms switched off and the entry put on the equator, the trajectory agrees with an
+independently written planar integrator to 1 m in altitude, 8 m downrange and 2 ms in
+the landing time.
+
+**This is a sample case, not a validation**, and it leaves out things that a comparison
+with a flight would need:
+
+* The drag coefficient of this tutorial's table depends on the Knudsen number only. The
+  vehicle is below Mach 5 from 17 km and lands at Mach 1.2, and the supersonic drag of a
+  70° sphere-cone is not the hypersonic one. The table format can carry a Mach axis;
+  `validation/pathfinder` flies one traced back from the Pathfinder flight, and measures
+  what leaving it out costs: 2.5 % rms in the deceleration and 29 m/s in the speed.
+* No parachute. A real lander opens one at Mach 2 or so, here at about 7 km.
+* Modified Newtonian flow with `Cp_max = 1.839`, the value for a ratio of specific heats
+  of 1.4. CO2 at Martian temperatures is nearer 1.3, which gives 1.873 (+1.9 %), and the
+  real-gas shock layer moves it further.
+* One profile of a climatology: no day-to-day variability, and the same profile over
+  the whole 872 km.
+* The KML output is off: Google Earth would draw the Martian coordinates on the Earth.
 
 ## Six-degree-of-freedom (attitude) simulation
 
@@ -853,16 +957,17 @@ need nothing beyond what `Tacode` itself requires. They cover:
 
 | Module | What it checks |
 |---|---|
-| `test_coordinate_system.py` | Round trips between the Cartesian, geodetic and polar systems; behaviour at longitude 180 deg, at the poles and on the equator |
-| `test_force_term.py` | The gravity vector equals `-grad U` for a potential written independently from the README; the Coriolis, centrifugal and drag terms; the lift is perpendicular to the air-relative velocity, has the magnitude the coefficient asks for, turns about the velocity with the bank angle, and is not evaluated at all when `lift_coefficient` is absent or zero. The bank table is interpolated and clamped, wins over the constant, and stops the run when malformed; through the solver, a constant table reproduces the scalar bank bit for bit, lift up raises the trajectory and lift down lowers it, and a table which switches lands between the two |
+| `test_coordinate_system.py` | Round trips between the Cartesian, geodetic and polar systems; behaviour at longitude 180 deg, at the poles and on the equator, including a point on the equatorial plane below the surface (which used to come out at latitude 90 deg and altitude +0, so an equatorial entry never stopped); with zero flattening the altitude is the distance above the sphere and the latitude is planetocentric |
+| `test_force_term.py` | The gravity vector equals `-grad U` for a potential written independently from the README; the Coriolis, centrifugal and drag terms; the lift is perpendicular to the air-relative velocity, has the magnitude the coefficient asks for, turns about the velocity with the bank angle, and is not evaluated at all when `lift_coefficient` is absent or zero. The bank table is interpolated and clamped, wins over the constant, and stops the run when malformed; through the solver, a constant table reproduces the scalar bank bit for bit, lift up raises the trajectory and lift down lowers it, and a table which switches lands between the two. The `planet` section of the Mars tutorial reproduces the JGMRO_120F field: the gradient of the potential written with its fully normalised coefficients equals the gravity the solver computes |
 | `test_kepler.py` | Energy and angular momentum are conserved in the two-body limit (J terms, rotation and drag switched off); RK4 converges at fourth order |
-| `test_atmosphere.py` | Table interpolation reproduces the nodes, clamps outside the table range, and scales the Knudsen number with the characteristic length; the aerodynamic table is read in both formats, and its axisymmetry is checked so that a table a 6-DOF run cannot represent is reported rather than used silently; `kind_aerodynamic_model: constant` does not read the table at all, and a table written by `database/atmosphere/generate_atmosphere_table.py` is read back. No module in `src/` calls `scipy.interpolate.interp1d`, which SciPy has treated as legacy since 1.10: the density spline is `make_interp_spline(k=3)` and the drag coefficient is `np.interp`, both of which return bit-for-bit what `interp1d` returned. The (angle of attack, Knudsen) table is read by a hand-written bilinear interpolation rather than by `RegularGridInterpolator`, and it is held to returning exactly what scipy returns — on a synthetic grid and on the shipped table, at random points and at the nodes. A table may declare the length its Knudsen axis was built with: a matching length says nothing, a different one is reported with both values while the run continues, a table without the line is not checked, and a declaration whose number cannot be read stops. Every shipped table declares one; the 0.8 m of `aerodynamic.txt` is checked against the altitude column of the table itself, and the shipped cases whose length differs from their table are pinned to the four re-entry tutorials that knowingly do so. An atmosphere table carrying none of N2, O2, N and O stops rather than building an infinite Knudsen number |
+| `test_atmosphere.py` | Table interpolation reproduces the nodes, clamps outside the table range, and scales the Knudsen number with the characteristic length; the aerodynamic table is read in both formats, and its axisymmetry is checked so that a table a 6-DOF run cannot represent is reported rather than used silently; `kind_aerodynamic_model: constant` does not read the table at all, and a table written by `database/atmosphere/generate_atmosphere_table.py` is read back. No module in `src/` calls `scipy.interpolate.interp1d`, which SciPy has treated as legacy since 1.10: the density spline is `make_interp_spline(k=3)` and the drag coefficient is `np.interp`, both of which return bit-for-bit what `interp1d` returned. The (angle of attack, Knudsen) table is read by a hand-written bilinear interpolation rather than by `RegularGridInterpolator`, and it is held to returning exactly what scipy returns — on a synthetic grid and on the shipped table, at random points and at the nodes. A table may declare the length its Knudsen axis was built with: a matching length says nothing, a different one is reported with both values while the run continues, a table without the line is not checked, and a declaration whose number cannot be read stops. Every shipped table declares one; the 0.8 m of `aerodynamic.txt` is checked against the altitude column of the table itself, and the shipped cases whose length differs from their table are pinned to the four re-entry tutorials that knowingly do so. An atmosphere table carrying none of the molecular species stops rather than building an infinite Knudsen number. A table of CO2 alone builds the Knudsen number with the CO2 diameter, and a Mars table fetched by the generator is consistent with its own density (the number densities, which the generator derives from the pressure, temperature and mixing ratios, sum to the density within 2 % below 150 km; skipped when no table has been fetched, as in CI) |
+| `test_aerodynamic_mach.py` | The drag coefficient of a table with `MACH` blocks: the blocks are sorted, and mixing them with `AOA` blocks, a single block, an empty block, data before the first `MACH` line or a repeated Mach number stops; the interpolation is bilinear in (Mach, Kn), reproduces the nodes and clamps both axes; the speed of sound agrees with the standard atmosphere at sea level, and a missing or unphysical ratio of specific heats or molecular weight stops, as does a 6-DOF run given such a table. A table with the same drag at every Mach number gives the trajectory of the Knudsen-only table; the `Mach` column equals the speed over the speed of sound, a larger supersonic drag leaves the hypersonic part untouched and slows the vehicle afterwards, the Mach number is formed from the air-relative velocity, and each Runge-Kutta stage uses its own (the scheme stays fourth order, against 1.4 when the first stage's velocity is reused). A table without `MACH` blocks writes no `Mach` column |
 | `test_database_path.py` | The path of the atmosphere, aerodynamic and wind tables: `default` and `auto` resolve to the master under `database/`, `manual` is taken as given, a misspelt `directory_path_specify` stops the run instead of falling back, `manual` without its directory key stops as well, and the copy of every table in a case directory is identical to the master |
 | `test_solver_invariants.py` | The time loop stops at the requested time, all history arrays share one length, the atmospheric values line up with the position of the same index, and the Tecplot header matches the number of rows |
 | `test_attitude.py` | Quaternion, Euler-angle and local-horizon conversions round trip and agree with analytic rotations and with the frame the initial velocity already uses; the quaternion kinematics reproduce a constant-rate rotation and drop the Earth rate |
 | `test_moment_term.py` | Torque-free motion conserves the angular momentum and the energy, an axisymmetric body precesses at the analytic rate, the gravity-gradient torque matches its closed form and vanishes for an isotropic body, and the damping term removes rotational energy |
 | `test_solver_attitude.py` | A 6-DOF run keeps the state arrays aligned with the trajectory, the pitch oscillation matches its analytic period, planar motion stays planar, damping shrinks the amplitude, and the aerodynamic force at zero incidence equals the 3-DOF drag |
-| `test_regression_3dof.py` | With the attitude switched off, both tutorial cases reproduce the reference outputs committed in `tutorial/`, and a configuration carrying an `attitude` section set to `False` gives exactly the same trajectory as one without the section |
+| `test_regression_3dof.py` | With the attitude switched off, the tutorial cases (`work`, `work_reentry`, `work_reentry_wind_table`) reproduce the reference outputs committed in `tutorial/`, and a configuration carrying an `attitude` section set to `False` gives exactly the same trajectory as one without the section |
 | `test_montecarlo.py` | `montecarlo.random_seed` makes a run repeatable (the same seed gives the same dispersion, another seed does not, and no shipped configuration fixes a seed), the dispersion is multiplicative so a base value of zero stays put, and the case directories are found by their four-digit suffix. The driver rewrites the right line of the control file: the section tells `wind.velocity` apart from `initial_settings.velocity`, lines that happen to hold the same value are not rewritten together, the search is closed at the end of the section so that a key of another section is never rewritten, and a missing section, a missing key or a key which is not a list stops the run. A case which exits with a non-zero code or writes no result file is counted, and the run stops with a non-zero exit code unless `flag_allow_failure` is set. The wind tutorial and its template agree with each other, and two shortened cases actually run and come out different. The postprocess gathers the cases into one Tecplot file: one zone per case with its own point count, the template left out, a case without a result skipped, and cases whose columns disagree stopping the run. The animation helper is checked on its geometry — the offsets from the reference at the same time, the window that holds every point, the unwrapped longitude — and on actually writing a frame, a self-contained `.html` and the 3D view, which is skipped without matplotlib |
 | `test_helper_config.py` | The settings file of the post-processing tools: the order of precedence (command line, then the file, then the default), a list-valued option, a missing file being no error, and an unknown key, a malformed section or a missing required value stopping the run. `--save-config` writes what can be read back and keeps the other sections, all three tools read the file the same way, and the `config_helper.yml` shipped with the tutorials is accepted by the tool it belongs to |
 | `test_helper_visualization.py` | The post-processing tools in `src_helper/`: the Tecplot reader on both a 3-DOF and a 6-DOF output, a file of several zones being refused rather than joined into one trajectory (and taken apart by `read_tecplot_zone`), the vehicle shapes (front distinguishable from back, roll visible), and the animation script writing an actual still, an `.html` animation as one self-contained file, and an `.mp4`. The drawing tests are skipped when matplotlib is not installed, and the `.mp4` one when `ffmpeg` is not |
@@ -909,6 +1014,7 @@ is a write-up rather than a pass or a fail.
 | `validation/apollo4` | Apollo 4 (AS-501) entry, 1967-11-09 | with the vertical lift measured in flight, altitude within 0.5 km to the peak heating and 5.4 km rms over the whole entry; the atmosphere table within 4.3 % of the flight-derived density |
 | `validation/apollo10` | Apollo 10 (AS-505) entry, 1969-05-26 | **the bank angle measured in flight as the input**: altitude 3.2 km rms, inertial velocity 189 m/s rms over the whole entry |
 | `validation/fire2` | Project Fire flight II entry, 1965-05-22 | **the attitude**, on an uncontrolled spin-stabilised body: the pitch-yaw oscillation within 5 % of the measured one; the trajectory 48 m rms against NASA's own integration at the same drag coefficient; the atmosphere table 0.6 % from the sounding-rocket density |
+| `validation/pathfinder` | Mars Pathfinder entry, 1997-07-04 | **at Mars, with a drag coefficient that depends on the Mach number**: at the flight's own atmosphere and drag, the measured deceleration to 0.39 % rms and the altitude to 47 m rms (a consistency check); the Mars Climate Database and Tacode's panel-method drag each put against the flight |
 
 ```console
 cd validation/apollo4
@@ -964,6 +1070,35 @@ The atmosphere table of the case was written by
 `database/atmosphere/generate_atmosphere_table.py`, which calls NRLMSISE-00 through
 `pymsis` and writes the CCMC format the solver reads. `pymsis` is a dependency of that
 generator only, in the same way that the wind-table generator owns its data sources.
+
+### Mars Pathfinder: the drag at Mach number
+
+```console
+cd validation/pathfinder
+./run_tacode.sh                  # three configs, 0.6 s each
+python3 compare_pathfinder.py    # the numbers and the figures
+```
+
+**The first case at Mars, and the one that needs the drag coefficient to depend on the Mach
+number**: the ballistic Pathfinder entry is hypersonic at the top and at Mach 1.8 when the
+parachute mortar fires, and its drag coefficient falls from 1.71 to 1.55 on the way. The PDS
+archive holds the measured acceleration at 32 Hz and NASA's reconstruction of the trajectory
+and the atmosphere, but not the drag coefficient that reconstruction assumed; since the density
+was derived from it, the case traces it back, `CD = 2 m a/(ρ A V²)`, into a table of `MACH`
+blocks. Flying the flight's own atmosphere with that table is therefore a check of consistency
+rather than of the drag: it reproduces the measured deceleration to **0.39 % rms**, the peak of
+155.4 m/s² to 0.02 m/s² and 0.18 s, and the altitude to 47 m. The two other configs are the
+tests. Tacode's own panel-method drag, which has no Mach number in it, is 3 % low in the
+hypersonic part and 5 % high at the low Mach numbers, which costs 29 m/s rms in speed. The Mars
+Climate Database climatology is denser than the atmosphere Pathfinder flew through — by
+10–25 % below 40 km depending on the altitude datum, and by a factor of two above 60 km —
+which moves the peak deceleration 4 % and the state at the mortar fire by 1.5 km.
+
+Getting there took three corrections to the data, each described in
+`validation/pathfinder/README.md`: the samples after a range switch of the accelerometer
+(36 g for a tenth of a second, where 0.7 g was true), an entry state printed in the archive
+that lies 73 km off the archived trajectory, and a constant 1.2 km between the archived
+altitude and the radius the entry state gives.
 
 ### Project Fire flight II: the attitude
 
@@ -1091,8 +1226,10 @@ Two formats are accepted, and the format is detected from the file itself:
 | CCMC / VITMO | a line reading `Selected parameters are:` | the NRLMSISE-00 form at [CCMC](https://ccmc.gsfc.nasa.gov/) |
 | NRLMSISE-00 Fortran | a line starting `1, ALTITUDE` | `NRLMSISE-00_readctl.FOR` writing the table directly |
 
-Both give the same seven columns: height, O, N2, O2, total mass density, neutral
-temperature, N. Rows that are not seven numbers are skipped, so trailing blank or
+The shipped Earth tables give the same seven columns: height, O, N2, O2, total mass
+density, neutral temperature, N. The CCMC form takes its column names from the header,
+so a table can carry other species as well; the Mars table has CO2, N2, Ar, CO, O and O2.
+Rows that are not as many numbers as there are columns are skipped, so trailing blank or
 comment lines are harmless.
 
 Two tables are supplied in the master `database/atmosphere`. Switch between them with
@@ -1113,7 +1250,9 @@ Two cautions when swapping tables:
 - **The solar activity must match your case.** Two tables generated for different
   F10.7 differ by a factor of two in density at 400 km, which changes the drag by
   the same factor.
-- **The Knudsen number is built from N2, O2, N and O only.** Those are 96% of the
+- **The Knudsen number is built from N2, O2, N and O, and at Mars from CO2, Ar and CO
+  as well** (whichever the table carries; hard-sphere diameters from the viscosity at
+  0 °C). Helium is not among them: N2, O2, N and O are 96% of the
   mass at 400 km but only 35% at 700 km, where helium dominates. The drag
   coefficient is flat over that range, so the effect on the trajectory is
   negligible, but the Knudsen number itself is increasingly approximate above
@@ -1510,7 +1649,8 @@ ytakahashi@eng.hokudai.ac.jp
 # References
 
 - Yusuke Takahashi, Masahiro Saito, Nobuyuki Oshima, and Kazuhiko Yamada, “Trajectory Reconstruction for Nanosatellite in Very Low Earth Orbit Using Machine Learning.” Acta Astronautica 194: 301–8. 2022. https://doi.org/https://doi.org/10.1016/j.actaastro.2022.02.010.
-- Wagner, Carl. A. 1971. “The Gravity Potential And Force Field of the Earth Through Fourth Order.” NASA TN D-3317, 1–60.
+- Wagner, Carl. A. 1966. “The Gravity Potential And Force Field of the Earth Through Fourth Order.” NASA TN D-3317, 1–60.
+- Wagner, Carl A. 1966. “The Earth's Longitude Gravity Field as Sensed by the Drift of Three Synchronous Satellites.” NASA TN D-3557.
 - Fucheng Liu, Shan Lu, and Yue Sun, Guidance and Control Technology of Spacecraft on Elliptical Orbit. Springer, 2019.
 - NRLMSISE-00 Atmosphere Model
 - Defense Mapping Agency, “Department of Defense World Geodetic System 1984: its definition and relationships with local geodetic system“, 8350, 1987

@@ -1,6 +1,7 @@
 # Atmosphere tables
 
-All three files are NRLMSISE-00 output. `atmosphere.filename_atmosphere` in `config.yml`
+The three Earth tables are NRLMSISE-00 output. The Mars table is **not in the repository**;
+it is fetched by each user (see [Mars](#mars) below). `atmosphere.filename_atmosphere` in `config.yml`
 selects which one is used; the file format is detected from the file itself, so no
 other setting has to change.
 
@@ -88,9 +89,72 @@ neutral temperature, N.
 
 ## Knudsen number
 
-`Tacode` builds the Knudsen number from N2, O2, N and O only, since those are the
-species in these tables. They account for 96% of the mass at 400 km, but only 66% at
+`Tacode` builds the Knudsen number from N2, O2, N and O in the Earth tables, since those
+are the species they carry (CO2, Ar and CO, the Martian ones, are summed as well when a
+table has them). They account for 96% of the mass at 400 km, but only 66% at
 600 km and 35% at 700 km, where helium dominates. The drag coefficient in
 `database/aerodynamic/aerodynamic.txt` is flat over that Knudsen range, so the effect
 on a trajectory is negligible, but the reported Knudsen number is increasingly
 approximate above roughly 500 km.
+
+## Mars
+
+`atmospheremodel_mars.txt`, which `tutorial/work_reentry_mars` reads, is a profile of the
+Mars Climate Database (MCD, LMD / OU / IAA / ESA / CNES). **It is not distributed with
+Tacode** (`atmospheremodel_mars*.txt` is in `.gitignore`): each user fetches it from the MCD
+web interface with `generate_atmosphere_table_mars.py`, in the case directory:
+
+```console
+cd tutorial/work_reentry_mars
+python3 ../../database/atmosphere/generate_atmosphere_table_mars.py --latitude 19.13 \
+        --longitude -33.22 --ls 142.7 --local-time 3.0 --altitude 0 200 \
+        -o database/atmosphere/atmospheremodel_mars.txt
+```
+
+(`--averaging loct` asks for the mean over all local times instead of one local time; a
+diurnal-mean table takes much longer, over ten minutes for 0–250 km.) The command above is
+the Mars Pathfinder landing site at the season and local true solar time of its
+landing, in the climatology scenario with average solar EUV (`--dust 1`), 0–200 km every
+1 km. The script needs only the standard library, but it needs the network, and the web
+interface is meant for moderate use: one table is 18 queries (4 variables and 35 heights
+each), with a pause between them. Cite Millour et al., *The Mars Climate Database
+(version 6.1)*, EPSC 2022, and Forget et al., J. Geophys. Res. 104, 24155 (1999).
+
+**The table is MCD data, and the MCD terms apply to it, not Tacode's MIT license**
+([access page](https://www-mars.lmd.jussieu.fr/mars/access.html)): scientific use is free
+provided the origin of the data is quoted in publications and the MCD team is kept
+informed of the use; commercial use needs their authorization; the data come with no
+warranty. The terms say nothing either way about redistributing derived tables, which is
+why the repository carries the script and not the table. The script writes the terms
+into the header of every table it makes, so that they travel with the file.
+
+| | |
+|---|---|
+| columns | height, CO2, N2, Ar, CO, O, O2 (number densities), mass density, temperature |
+| height | **above the sphere of radius 3396.0 km** (MCD `zkey = 5`); the case runs with `planet.radius: 3396.0e+3` and `ellipticity: 0.0` so that Tacode's altitude is the same quantity |
+| number densities | `x_i p/(k T)` from the MCD pressure, temperature and volume mixing ratios (MCD does not give number densities) |
+| mass density | the MCD density itself |
+
+Measured on the table fetched on 2026-09-29 (MCD v6.2): the number densities of the six species, weighted by their molecular masses, give back
+the MCD density to within 1.5 % below 150 km (the smallest ratio, 0.985, is at 60 km).
+Above that, helium and hydrogen, which are not written, take up to 5.5 % of the molecules
+at 200 km and the ratio falls to 0.978. The script refuses a range that goes below the
+local surface (MCD returns no value there); at the Pathfinder site the surface lies below
+the 3396 km sphere, so the table starts at 0 km.
+
+One profile of a climatology: no day-to-day variability (MCD's `rmsrho`), and the same
+profile wherever the vehicle is.
+
+### `atmospheremodel_pathfinder_ddr.txt`
+
+The atmosphere **measured by Mars Pathfinder** on its entry (1997-07-04, 03:00 local
+time), for `validation/pathfinder`, from the PDS archive of the ASI/MET experiment
+(`MPFL-M-ASIMET-4-DDR-EDL-V1.0`, Magalhães, Schofield and Seiff 1999). It is NASA data in
+the public domain, so unlike the MCD table it is in the repository. The density and
+temperature are those of the archive, 133 km down to 1.5 km; the number densities are
+`ρ/(M m_u)` split by the Viking composition below 100 km, with atomic oxygen making up the
+drop of the mean molecular weight above (they only feed the Knudsen number). **The height
+is 1.2 km below the archive's own altitude**, in the frame of the documented entry state;
+why, and what that does to a comparison with the MCD, is in
+`validation/pathfinder/README.md`. Written by `validation/pathfinder/convert_pds.py`.
+

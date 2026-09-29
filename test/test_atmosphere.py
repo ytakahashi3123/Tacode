@@ -800,7 +800,7 @@ class TestTheTableCoversTheTutorial(unittest.TestCase):
     伸ばして直したので、**戻されたらここで落ちる**。
     """
 
-    CASES = ('work', 'work_reentry', 'work_reentry_6dof')
+    CASES = ('work', 'work_reentry', 'work_reentry_6dof', 'work_reentry_mars')
 
     def test_every_case_stays_inside_its_table(self):
         for name in self.CASES:
@@ -954,7 +954,7 @@ class TestTheReferenceLengthOfTheAerodynamicTable(unittest.TestCase):
         for path in sorted(glob.glob(os.path.join(ROOT_DIR, 'database', 'aerodynamic', '*.txt'))):
             with self.subTest(table=os.path.basename(path)):
                 with quiet():
-                    _, _, length_reference = satellite.parse_aerodynamic_file(path)
+                    _, _, length_reference, _ = satellite.parse_aerodynamic_file(path)
                 self.assertIsNotNone(length_reference)
                 self.assertGreater(length_reference, 0.0)
 
@@ -981,7 +981,7 @@ class TestTheReferenceLengthOfTheAerodynamicTable(unittest.TestCase):
 
         path = os.path.join(ROOT_DIR, 'database', 'aerodynamic', 'aerodynamic.txt')
         with quiet():
-            _, block, length_reference = satellite.parse_aerodynamic_file(path)
+            _, block, length_reference, _ = satellite.parse_aerodynamic_file(path)
 
         recovered = np.interp(block[0][:, 13], atm[atmosphere.KEY_Height],
                               atm[atmosphere.KEY_KN])/block[0][:, 0]
@@ -1013,7 +1013,7 @@ class TestTheReferenceLengthOfTheAerodynamicTable(unittest.TestCase):
             directory = satellite.get_database_directory(section, 'satellite', 'aerodynamic',
                                                          'directory_aerodynamic')
             with quiet():
-                _, _, length_reference = satellite.parse_aerodynamic_file(
+                _, _, length_reference, _ = satellite.parse_aerodynamic_file(
                     os.path.join(directory, section['filename_aerodynamic']))
             if length_reference is None:
                 continue
@@ -1078,10 +1078,81 @@ class TestTheKnudsenNumberNeedsMolecularDensities(unittest.TestCase):
                 config['atmosphere']['filename_atmosphere'] = name
                 with quiet() as buffer:
                     atm = atmosphere.initial_settings_atmosphere(config)
-                for key in atmosphere.LIST_MOLECULAR_KIND:
+                # 地球の 4 種（LIST_MOLECULAR_KIND の後ろには火星の種が続く）
+                for key in (atmosphere.KEY_N2, atmosphere.KEY_O2, atmosphere.KEY_N, atmosphere.KEY_O):
                     self.assertIn(key, atm, name)
                 self.assertTrue(np.all(np.isfinite(atm[atmosphere.KEY_KN])), name)
                 self.assertIn('Molecular species used', buffer.getvalue())
+
+
+class TestTheMarsAtmosphere(unittest.TestCase):
+    """
+    火星の大気テーブル（Mars Climate Database から作ったもの）を読めること。
+
+    火星の大気は 95 % が CO2 で、地球の 4 種（N2 / O2 / N / O）だけで Kn を作ると
+    N2 の 2.8 % と O・O2 の微量しか拾わず、Kn を 100 km 以下で 35〜53 倍、
+    125 km で 14 倍大きく見積もる（同梱のテーブルで 2026-09-29 に実測）。
+    CO2 / Ar / CO を分子種に足したので、それが和に入っていることを見る。
+    """
+
+    MASS_MOLECULAR = {'CO2': 44.0095, 'N2': 28.0134, 'Ar': 39.948,
+                      'CO': 28.0101, 'O': 15.9994, 'O2': 31.9988}
+    MASS_ATOMIC = 1.66053907e-27
+
+    def load(self, directory, filename):
+        config = load_config()
+        config['satellite']['characteristic_length'] = 1.325
+        config['atmosphere']['directory_path_specify'] = 'manual'
+        config['atmosphere']['directory_atmosphere'] = directory
+        config['atmosphere']['filename_atmosphere'] = filename
+        with quiet() as buffer:
+            atm = atmosphere.initial_settings_atmosphere(config)
+        return atm, buffer.getvalue()
+
+    def test_a_table_of_carbon_dioxide_alone_uses_its_diameter(self):
+        rows = [(0.0, 2.0e17, 1.0e-2, 210.0), (50.0, 1.0e15, 7.0e-5, 150.0),
+                (100.0, 3.0e12, 2.2e-7, 130.0), (150.0, 1.0e10, 7.0e-10, 150.0)]
+        with tempfile.TemporaryDirectory() as directory:
+            with open(os.path.join(directory, 'mars.txt'), 'w') as f:
+                f.write('synthetic\n\n   Selected parameters are:\n1 Height, km\n2 CO2, cm-3\n'
+                        '3 Mass_density, g/cm-3\n4 Temperature_neutral, K\n\n'
+                        '          1          2          3          4\n')
+                for row in rows:
+                    f.write('%11.1f%11.3e%11.3e%11.3e\n' % row)
+            atm, log = self.load(directory, 'mars.txt')
+
+        self.assertIn('mean free path: CO2', log)
+        number_density = np.array([row[1] for row in rows])*1.e6
+        # 直径はモジュールの辞書からではなく文献値（Kennard の表）を書く。辞書から取ると
+        # 値を書き換えても一緒に動いて検査にならない
+        expected = 1.0/(np.sqrt(2.0)*np.pi*number_density*(4.59e-10)**2*1.325)
+        np.testing.assert_allclose(atm[atmosphere.KEY_KN], expected, rtol=1.0e-14)
+
+    @unittest.skipUnless(os.path.exists(os.path.join(ROOT_DIR, 'database', 'atmosphere',
+                                                     'atmospheremodel_mars.txt')),
+                         'the Mars table is not in the repository; generate it with '
+                         'database/atmosphere/generate_atmosphere_table_mars.py')
+    def test_a_generated_table_is_consistent_with_its_own_density(self):
+        # **MCD のテーブルはリポジトリに無い**（再配布しない。使う人が生成器で取得する）ので、
+        # 手元で生成したときだけ走る。
+        # 数密度は生成器が MCD の圧力・温度・混合比から n = x p/(k T) で作っており、
+        # 密度は MCD の値そのもの。単位（cm-3 と m-3、g/cm3 と kg/m3）を取り違えると
+        # 比が 1e3〜1e6 の桁で外れる。2026-09-29 の実測は 150 km 以下で 0.985〜1.000
+        # （60 km で最小。MCD の密度と、混合比から作った平均分子量の差）、上は書いていない
+        # He / H が増えて 200 km まで 0.978 まで下がる
+        directory = os.path.join(ROOT_DIR, 'database', 'atmosphere')
+        atm, log = self.load(directory, 'atmospheremodel_mars.txt')
+        self.assertIn('mean free path: N2, O2, O, CO2, Ar, CO', log)
+
+        density_species = sum(atm[name]*mass*self.MASS_ATOMIC for name, mass in self.MASS_MOLECULAR.items())
+        ratio = density_species/atm[atmosphere.KEY_Mass_density]
+        altitude = atm[atmosphere.KEY_Height]
+        below = altitude <= 150.0
+        self.assertTrue(np.all(np.abs(ratio[below] - 1.0) < 0.02), ratio[below].min())
+        self.assertTrue(np.all(np.abs(ratio - 1.0) < 0.03), ratio.min())
+        self.assertTrue(np.all(np.isfinite(atm[atmosphere.KEY_KN])))
+        # CO2 が主成分であること（火星のテーブルを取り違えていないこと）
+        self.assertGreater(atm['CO2'][0]/sum(atm[name][0] for name in self.MASS_MOLECULAR), 0.9)
 
 
 class TestTheSourceDoesNotUseLegacySciPy(unittest.TestCase):

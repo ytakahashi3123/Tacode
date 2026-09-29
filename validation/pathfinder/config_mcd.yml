@@ -1,0 +1,174 @@
+# Mars Pathfinder entry, 1997-07-04
+#
+# Validation case: a ballistic entry at Mars (no lift, no guidance), from the entry
+# interface to the mortar fire of the parachute. See README.md for the sources of every
+# number and for what each of the three configs tests.
+#
+#   Entry state : Spencer et al. 1998 (AAS 98-146), table 1 (orbit determination),
+#                 converted by entry_state.py
+#   Atmosphere  : **the Mars Climate Database** (v6.2, climatology, average solar EUV) at the
+#                 landing site, Ls 142.7 deg., 03:00 local true solar time. Not in the
+#                 repository: run_tacode.sh prints the command that fetches it
+#   Aerodynamics: the drag coefficient the NASA reconstruction used, traced back from the
+#                 measured acceleration and the reconstructed density (convert_pds.py):
+#                 **CD(Mach, Kn)**, the Mach axis of the table is used
+#   Vehicle     : 585.3 kg, 5.526 m^2 (PDS edlddrds.htm)
+#
+# config.yml       flight atmosphere + flight CD : the solver
+# config_mcd.yml   Mars Climate Database + flight CD : the atmosphere model
+# config_panel.yml flight atmosphere + Tacode's panel-method CD(Kn) : the aerodynamic model
+
+computational_setup:
+  # Flag for initial or restart calculation
+  # --True: initial condition, False: restart
+  flag_initial: True
+
+  # Maximum time step, s
+  # --The time is counted from the entry interface (r = 3522.2 km, the epoch of the
+  #   entry state). The mortar fires 169.6 s after it (Spencer et al. 1998, table 2).
+  time_elapsed_maximum: 169.6
+
+  # Sanity check on the state (a diverged run stops instead of being written out)
+  flag_check_divergence: True
+  factor_radius_maximum: 10.0
+  factor_velocity_maximum: 10.0
+
+
+satellite:
+  # Mass, kg (entry phase, PDS edlddrds.htm)
+  mass: 585.3
+  # Characteristic area, m^2 (PDS edlddrds.htm; 2.65 m diameter)
+  characteristic_area: 5.526
+  # Characteristic length, m
+  # --The length the Knudsen axis of the table was built with (the base radius), not a
+  #   physical parameter of the run
+  characteristic_length: 1.325
+
+  # Aerodynamic model
+  # --constant, or fileread
+  kind_aerodynamic_model: fileread
+
+  # Drag coefficient (aerodynamic_model: constant)
+  drag_coefficient: 1.0
+
+  # Drag coefficient (aerodynamic model: fileread)
+  # --The table has MACH blocks: the drag depends on the Mach number and the Knudsen
+  #   number. The Mach number needs atmosphere.specific_heat_ratio and molecular_weight.
+  directory_path_specify: manual # default or manual
+  directory_aerodynamic: database/aerodynamic
+  filename_aerodynamic: aerodynamic_pathfinder.txt
+
+initial_settings:
+  # Initial conditions
+  # Initial coordinate, 1:Long.(deg) 2: Lat.(deg), 3:Alt.(km)
+  # --Spencer et al. 1998 table 1: 3522.2 km, 22.6303 N, 338.1691 E. The altitude is above
+  #   the 3396 km sphere below (ellipticity 0), and the latitude is planetocentric.
+  coordinate:
+    - -21.8309
+    - 22.6303
+    - 126.2
+  # Initial velocity relative to the rotating planet, [East, North, Up], m/s
+  # --Table 1 gives the inertial 7264.2 m/s, -14.0610 deg., 253.1479 deg.; entry_state.py
+  #   takes the rotation of Mars off: 7478.63 m/s, -13.6499 deg., 253.6746 deg.
+  velocity:
+    - -6974.38
+    - -2042.81
+    - -1764.87
+  density_factor:
+    - 1.0
+
+
+planet:
+  # Mars: the same as tutorial/work_reentry_mars (JGMRO_120F, a sphere of 3396.0 km,
+  # IAU 2015 rotation). See the comments there.
+  gravitational_constant: 6.67408e-11
+  mass: 6.4171204e+23
+  radius: 3.3960000e+6
+  ellipticity: 0.0
+  rotation_rate: 7.0882181e-5
+  potential_factor:
+    J2: 1.9566086e-3
+    J22: -6.3106447e-5
+    J3: 3.1476119e-5
+    J4: -1.5387645e-5
+    Lambda22: 74.980468   # Degree
+
+
+epoch:
+  flag_epoch: False
+  datetime: '1997-07-04T16:51:50.482Z'
+
+
+atmosphere:
+  # Atmosphere model
+  # --constant, or fileread
+  kind_atmosphere_model: fileread
+
+  # Atmosphere model: constant settings
+  density: 1.e-3
+  temperature: 300.0
+
+  # Atmosphere model: file input
+  # --Mars Climate Database, the same table as tutorial/work_reentry_mars (Pathfinder's
+  #   landing site, season and local time). Its height is above the 3396 km sphere
+  directory_path_specify: manual # default or manual
+  directory_atmosphere: database/atmosphere
+  filename_atmosphere: atmospheremodel_mars.txt
+
+  # Gas properties for the Mach number of the aerodynamic table, a = sqrt(gamma R T / M)
+  # --The values the table was built with (convert_pds.py): the CO2 atmosphere of the
+  #   MSL reconstruction (Karlgaard et al. 2013, figure 8) and the mean molecular weight of
+  #   edl_ddr.tab below 100 km (Viking, Owen et al. 1977)
+  specific_heat_ratio: 1.335
+  molecular_weight: 43.49
+
+
+wind:
+  flag_wind: False
+  kind_wind_model: constant
+  velocity:
+    - 0.0
+    - 0.0
+    - 0.0
+  directory_path_specify: manual # default or manual
+  directory_wind: database/wind
+  filename_wind: windmodel.txt
+  kind_extrapolation: zero
+  velocity_factor:
+    - 1.0
+
+
+time_integration:
+  # Time integration scheme
+  # --explicit_euler, runge_kutta
+  kind_time_scheme: runge_kutta
+  # Time step, s
+  # --The peak deceleration is 16 g; 0.1 s moves nothing at the resolution of the
+  #   comparison (README.md, "Time step")
+  timestep_constant: 0.1
+
+
+restart_process:
+  directory_output: output_restart_mcd
+  flag_time_series: False
+  digid_step: 4
+  restart_step: 500
+  file_restart: restart.dat
+  frequency_output: 1
+
+
+post_process:
+  directory_output: output_result_mcd
+  flag_output_gpx: False
+  filename_output_gpx: geodetic.gpx
+  kml:
+    flag_output: False
+    filename_output: geodetic.kml
+    linestyle_color: simplekml.Color.white
+    linestyle_width: 4
+    extrude: 1
+    frequency_output: 10
+  tecplot:
+    flag_output: True
+    filename_output: tecplot.dat
+    frequency_output: 1

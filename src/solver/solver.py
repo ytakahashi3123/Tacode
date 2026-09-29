@@ -72,6 +72,11 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
   elif kind_aerodynamic_model == 'fileread' :
     knudsen_aerodynamic  = aerodynamic_dict['Knudsen_number']
     cdmean_aerodynamic   = aerodynamic_dict['CD_mean']
+    # Mach 軸のある表なら CD を (Mach, Kn) で引く（3 自由度だけ。6 自由度は
+    # satellite.initial_settings_satellite が止めている）
+    flag_mach = aerodynamic_dict[satellite.KEY_MACH] is not None
+    if flag_mach :
+      print('--The drag coefficient depends on the Mach number as well')
   else :
     print('kind_aerodynamic_model in config is incorrect.')
     print('Program stopped.')
@@ -172,15 +177,16 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
       if kind_atmosphere_model == 'fileread' :
         density, temperature, knudsen = atmosphere.get_atmosphere_property(altitude_tmp, atmosphere_dict)
 
-      # Aerodynamic coefficient
-      if kind_aerodynamic_model == 'fileread' :
-        cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
-
       # 対気速度。風が無効なら None のままで、以後は従来どおり ECEF 速度が使われる
       velocity_air = None
       if flag_wind :
         velocity_air = wind.get_relative_velocity(config, coord_tmp, coord_geod, veloc_tmp, wind_dict,
                                                   time_elapsed)
+
+      # Aerodynamic coefficient
+      if kind_aerodynamic_model == 'fileread' :
+        cdmean = get_drag_coefficient(knudsen, temperature, veloc_tmp, velocity_air, flag_mach,
+                                      knudsen_aerodynamic, cdmean_aerodynamic, aerodynamic_dict)
 
       # 出力用の大気量
       # --オイラー陽解法では現在位置での評価値がそのまま現在位置に対応する
@@ -247,16 +253,18 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
         if kind_atmosphere_model == 'fileread' :
           density, temperature, knudsen = atmosphere.get_atmosphere_property(altitude_tmp, atmosphere_dict)
 
-        # Aerodynamic coefficient
-        if kind_aerodynamic_model == 'fileread' :
-          cdmean = satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
-
         # 対気速度。各段の仮想位置で引く（大気量と同じ場所）。
         # 風が無効なら None のままで、以後は従来どおり ECEF 速度が使われる
         velocity_air = None
         if flag_wind :
           velocity_air = wind.get_relative_velocity(config, r_virtual, coord_geod, v_virtual, wind_dict,
                                                     time_elapsed + fact_time_rk[m]*delta_time)
+
+        # Aerodynamic coefficient
+        # --Mach 数も各段の仮想状態のもの（速度と、その位置の温度）
+        if kind_aerodynamic_model == 'fileread' :
+          cdmean = get_drag_coefficient(knudsen, temperature, v_virtual, velocity_air, flag_mach,
+                                        knudsen_aerodynamic, cdmean_aerodynamic, aerodynamic_dict)
 
         # 出力用の大気量
         # --1 段目は現在位置 r_n での評価値なので、これを出力に使う。
@@ -403,6 +411,21 @@ def solve_equation_motion(config, iteration, time_elapsed, coordinate_dict, velo
   knudsen_traj.append( knudsen )
 
   return iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict
+
+
+def get_drag_coefficient(knudsen, temperature, velocity, velocity_air, flag_mach,
+                         knudsen_aerodynamic, cdmean_aerodynamic, aerodynamic_dict):
+  #
+  # 3 自由度の CD。Mach 軸の無い表では従来どおり Kn だけで引く（値はビット単位で従来と同じ）。
+  # Mach 軸のある表では、対気速度（風が無ければ ECEF 速度）の大きさとその場の温度から
+  # Mach 数を作り、(Mach, Kn) で引く。
+  #
+  if not flag_mach :
+    return satellite.get_aerodynamic_coefficient(knudsen, knudsen_aerodynamic, cdmean_aerodynamic)
+
+  speed = vector_norm( velocity if velocity_air is None else velocity_air )
+  mach  = satellite.get_mach_number(speed, temperature, aerodynamic_dict)
+  return satellite.get_aerodynamic_coefficient_mach(knudsen, mach, aerodynamic_dict)
 
 
 def solve_eulerexplicit(dt, acceleration, coord_tmp, veloc_tmp, r_res, v_res):

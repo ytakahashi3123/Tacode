@@ -8,6 +8,7 @@ import attitude.attitude as attitude
 import coordinate_system.coordinate_system as coordinate_system
 import epoch.epoch as epoch_module
 import wind.wind as wind_module
+import satellite.satellite as satellite_module
 
 class orbital(general):
 
@@ -494,7 +495,7 @@ class orbital(general):
     return self.blank_code.join([str(value) for value in value_output])
 
 
-  def output_tecplot(self, config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict=None, epoch_dict=None, wind_dict=None, time_elapsed_initial=0.0):
+  def output_tecplot(self, config, iteration, time_elapsed, coordinate_dict, velocity_dict, trajectory_dict, attitude_dict=None, epoch_dict=None, wind_dict=None, time_elapsed_initial=0.0, aerodynamic_dict=None):
 
     if config['post_process']['tecplot']['flag_output'] :
 
@@ -513,6 +514,12 @@ class orbital(general):
       # --風は位置（と、いずれ時刻）だけの関数なので保存しておらず、ここで引き直す。
       #   オイラー角や迎角と同じ扱いで、配列長のずれが入り込む余地を無くすため
       flag_wind = wind_dict is not None
+
+      # Mach number
+      # --空力表に Mach 軸があるときだけ列を足す（CD がそれで変わるので、読めないと
+      #   CD の効きが追えない）。風と同じく保存せず、速度と温度から作り直す
+      flag_mach = aerodynamic_dict is not None and \
+                  aerodynamic_dict.get(satellite_module.KEY_MACH) is not None
 
       # Attitude (6-DOF)
       flag_attitude = attitude_dict is not None
@@ -537,6 +544,8 @@ class orbital(general):
         file.write('# Epoch (UTC): ' + epoch_module.get_string(epoch_dict, 0.0) + self.newline_code)
         file.write('# --UTC of each row is this epoch plus Time[s]' + self.newline_code)
       variables_tmp = 'Variables = Time[s],X[km],Y[km],Z[km],Long[deg.],Lati[deg.],Alti[km],Upl[m/s],Vpl[m/s],Wpl[m/s],VelplAbs[m/s],Dens[kg/m3],Temp[K],Kn'
+      if flag_mach :
+        variables_tmp = variables_tmp + ',Mach'
       # 風を入れたときだけ、風そのものと対気速度の大きさを添える。
       # 対地速度（Upl/Vpl/Wpl）はそのまま残す。両方見えないと風の効きが読めないため
       if flag_wind :
@@ -576,12 +585,17 @@ class orbital(general):
               str_wind = str_wind + self.blank_code + str(wind_local[m])
             str_wind = str_wind + self.blank_code + str(vector_norm(velocity_air))
           #
+          str_mach = ''
+          if flag_mach :
+            speed_air = vector_norm( velocity_cart[n] if velocity_air is None else velocity_air )
+            str_mach  = self.blank_code + str( satellite_module.get_mach_number(speed_air, temperature_traj[n], aerodynamic_dict) )
+          #
           str_attitude = ''
           if flag_attitude :
             str_attitude = self.blank_code + self.get_attitude_output(config, coordinate_cart[n], velocity_cart[n],
                                                                       quaternion_list[n], omega_list[n], rotation_rate_planet,
                                                                       velocity_air)
-          file.write( str_time  + str_coord_cart + str_coord_geod + str_veloc_pola + str_traj + str_wind + str_attitude + self.newline_code)
+          file.write( str_time  + str_coord_cart + str_coord_geod + str_veloc_pola + str_traj + str_mach + str_wind + str_attitude + self.newline_code)
       file.close()
 
     return
