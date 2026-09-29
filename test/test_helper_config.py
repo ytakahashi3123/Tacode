@@ -8,7 +8,7 @@ src_helper の後処理ツールの設定ファイル（config_helper.yml）の�
   2. 綴りを間違えたキーで**止まる**こと（黙って無視されると、設定したつもりで
      効いていない、という一番困る壊れ方になる）
   3. --save-config で書き出したものが、そのまま読み直せること
-  4. 3 つのツールがどれも同じ流儀で読むこと（セクション名だけが違う）
+  4. どのツールも同じ流儀で読むこと（セクション名だけが違う）
 """
 
 import argparse
@@ -35,7 +35,9 @@ SCRIPT = {'animate_trajectory': os.path.join(ROOT_DIR, 'src_helper', 'animate_tr
           'montecarlo_dispersion': os.path.join(ROOT_DIR, 'src_helper', 'montecarlo_dispersion',
                                                 'montecarlo_dispersion.py'),
           'montecarlo_animation': os.path.join(ROOT_DIR, 'src_helper', 'montecarlo_animation',
-                                               'montecarlo_animation.py')}
+                                               'montecarlo_animation.py'),
+          'flow_properties': os.path.join(ROOT_DIR, 'src_helper', 'flow_properties',
+                                          'flow_properties.py')}
 
 # 読み込むだけで matplotlib を要求するのはこのツールだけ。他の 2 つは
 # 入っていなければ絵を飛ばして正常終了する。
@@ -225,7 +227,7 @@ class TestWritingTheSettings(unittest.TestCase):
 
 
 class TestTheToolsReadTheSameFile(unittest.TestCase):
-    """3 つのツールが同じ流儀で設定を読むこと。セクション名だけが違う。"""
+    """どのツールも同じ流儀で設定を読むこと。セクション名だけが違う。"""
 
     def run_script(self, name, arguments):
         return subprocess.run([sys.executable, SCRIPT[name]] + arguments,
@@ -254,6 +256,9 @@ class TestTheToolsReadTheSameFile(unittest.TestCase):
 
     def test_montecarlo_animation(self):
         self.check_round_trip('montecarlo_animation')
+
+    def test_flow_properties(self):
+        self.check_round_trip('flow_properties')
 
     def test_a_tool_without_its_input_says_where_to_put_it(self):
         completed = self.run_script('montecarlo_dispersion', [])

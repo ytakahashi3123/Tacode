@@ -29,6 +29,10 @@ montecarlo_animation:
   directory: work_montecarlo_wind
   view: 3d
   spin: 0.0
+
+flow_properties:
+  nose_radius: 0.22
+  heating: tauber-mars
 ```
 
 - The keys are the long options without their dashes, with `-` written as `_`

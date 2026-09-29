@@ -681,6 +681,21 @@ writes a still instead, in whatever format matplotlib infers from the extension 
 
 See `src_helper/animate_trajectory/README.md` for the full list of options.
 
+### Flow properties along the trajectory
+
+```console
+cd validation/pathfinder
+python3 ../../src_helper/flow_properties/flow_properties.py output_result/tecplot.dat --nose-radius 0.6625
+```
+
+`flow_properties.py` writes, from a run's `tecplot.dat`, the Mach, Reynolds and Knudsen numbers,
+the pressure and the dynamic pressure, the stagnation-point heat flux (Sutton-Graves by default,
+or Tauber's Mars correlation, or any `C ρ^a V^b/sqrt(Rn)`) and the heat load, one row per point,
+to `tecplot_output.dat`. The ratio of specific heats and the molecular weight are read from the
+run's `config.yml` when it has them, so its Mach number is the solver's own. It replaces the
+`compute_flowfield_fromTrajectory` tool of Tacode v1 and writes the heat flux in W/m² (the v1
+tool wrote kW/m² under a W/m² heading). See `src_helper/flow_properties/README.md`.
+
 ### Dispersion of a Monte-Carlo run
 
 ```console
@@ -969,7 +984,8 @@ need nothing beyond what `Tacode` itself requires. They cover:
 | `test_solver_attitude.py` | A 6-DOF run keeps the state arrays aligned with the trajectory, the pitch oscillation matches its analytic period, planar motion stays planar, damping shrinks the amplitude, and the aerodynamic force at zero incidence equals the 3-DOF drag |
 | `test_regression_3dof.py` | With the attitude switched off, the tutorial cases (`work`, `work_reentry`, `work_reentry_wind_table`) reproduce the reference outputs committed in `tutorial/`, and a configuration carrying an `attitude` section set to `False` gives exactly the same trajectory as one without the section |
 | `test_montecarlo.py` | `montecarlo.random_seed` makes a run repeatable (the same seed gives the same dispersion, another seed does not, and no shipped configuration fixes a seed), the dispersion is multiplicative so a base value of zero stays put, and the case directories are found by their four-digit suffix. The driver rewrites the right line of the control file: the section tells `wind.velocity` apart from `initial_settings.velocity`, lines that happen to hold the same value are not rewritten together, the search is closed at the end of the section so that a key of another section is never rewritten, and a missing section, a missing key or a key which is not a list stops the run. A case which exits with a non-zero code or writes no result file is counted, and the run stops with a non-zero exit code unless `flag_allow_failure` is set. The wind tutorial and its template agree with each other, and two shortened cases actually run and come out different. The postprocess gathers the cases into one Tecplot file: one zone per case with its own point count, the template left out, a case without a result skipped, and cases whose columns disagree stopping the run. The animation helper is checked on its geometry — the offsets from the reference at the same time, the window that holds every point, the unwrapped longitude — and on actually writing a frame, a self-contained `.html` and the 3D view, which is skipped without matplotlib |
-| `test_helper_config.py` | The settings file of the post-processing tools: the order of precedence (command line, then the file, then the default), a list-valued option, a missing file being no error, and an unknown key, a malformed section or a missing required value stopping the run. `--save-config` writes what can be read back and keeps the other sections, all three tools read the file the same way, and the `config_helper.yml` shipped with the tutorials is accepted by the tool it belongs to |
+| `test_helper_config.py` | The settings file of the post-processing tools: the order of precedence (command line, then the file, then the default), a list-valued option, a missing file being no error, and an unknown key, a malformed section or a missing required value stopping the run. `--save-config` writes what can be read back and keeps the other sections, all four tools read the file the same way, and the `config_helper.yml` shipped with the tutorials is accepted by the tool it belongs to |
+| `test_flow_properties.py` | The flow properties along a trajectory (`src_helper/flow_properties`): the Mach number is the solver's own for the same ratio of specific heats and molecular weight, which are taken from the command line, then the run's control file, then the default of the gas; the pressure is `ρRT`, the viscosity follows the Sutherland law, the Reynolds number uses the length given, the heat flux is the Sutton-Graves expression, Tauber's Mars correlation comes out in W/m² and within a few per cent of it, the heat load is the time integral of the flux, the Knudsen number is copied from the run and the air-relative speed is used under a wind; a custom law without its coefficients or a missing length stops, and the file written is read back by the Tecplot reader with a name for every column |
 | `test_helper_visualization.py` | The post-processing tools in `src_helper/`: the Tecplot reader on both a 3-DOF and a 6-DOF output, a file of several zones being refused rather than joined into one trajectory (and taken apart by `read_tecplot_zone`), the vehicle shapes (front distinguishable from back, roll visible), and the animation script writing an actual still, an `.html` animation as one self-contained file, and an `.mp4`. The drawing tests are skipped when matplotlib is not installed, and the `.mp4` one when `ffmpeg` is not |
 | `test_attitude_verification.py` | Problems whose answer is known in closed form, solved by the production solver: the order of convergence, the Jacobi-elliptic solution of the torque-free asymmetric body, conservation of the angular momentum vector in inertial space, the precession of an axisymmetric body, the logarithmic decrement of a damped oscillation, the gravity-gradient libration frequency in a circular orbit, and the axisymmetry of the tabulated aerodynamics |
 | `test_regression_6dof.py` | The 6-DOF tutorial case, run for its full 1000 s, reproduces the `tecplot.dat`, `restart.dat` and `geodetic.kml` committed in `tutorial/work_reentry_6dof` |
